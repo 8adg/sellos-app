@@ -17,70 +17,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- DATOS DE EJEMPLO ---
-EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
-    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
-]
-
-# --- 🎨 ESTILOS CSS ---
-st.markdown("""
-<style>
-    .stApp { background-color: #fafafa; }
-
-    /* Contenedores tipo Card */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.04);
-        padding: 20px;
-    }
-
-    /* Textos oscuros */
-    label, p, h1, h2, h3, div { color: #333333 !important; }
-
-    /* Inputs */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
-        color: #212529 !important;
-        background-color: #ffffff !important;
-        border: 1px solid #ced4da;
-    }
-    [data-baseweb="select"] svg { fill: #212529 !important; }
-
-    /* Botón Principal */
-    div[data-testid="stForm"] button {
-        background-color: #28a745;
-        color: white !important;
-        font-weight: bold;
-        border: none;
-        border-radius: 6px;
-        padding: 10px;
-        transition: all 0.3s ease;
-    }
-    div[data-testid="stForm"] button:hover {
-        background-color: #218838;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
-    }
-    div[data-testid="stForm"] button p { color: white !important; }
-
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
-
-# --- HEADER ---
-c_logo, c_title = st.columns([0.15, 0.85])
-with c_logo:
-    if os.path.exists("assets/logo.svg"): st.image("assets/logo.svg", width=90)
-    elif os.path.exists("assets/logo.png"): st.image("assets/logo.png", width=90)
-with c_title:
-    st.title("Editor de Sellos Automáticos")
-    st.markdown("Diseña tu **Queselló!** en tiempo real. Área de impresión: **36x15 mm**.")
-st.write("---")
-
 # --- 1. CONFIGURACIÓN ---
 FUENTES_DISPONIBLES = {
     "Aleo Regular": "assets/fonts/Aleo-Regular.ttf",
@@ -97,14 +33,65 @@ FUENTES_DISPONIBLES = {
     "Arial (Sistema)": "Arial"
 }
 
-# --- CONSTANTES FÍSICAS ---
+# --- DATOS DE EJEMPLO ---
+EJEMPLO_INICIAL = [
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
+    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
+    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
+]
+
+# --- CONSTANTES ---
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
-
-# Escalas
 SCALE_PREVIEW = 20
 SCALE_HD = 80
+
+# --- ESTILOS CSS ---
+st.markdown("""
+<style>
+    .stApp { background-color: #f8f9fa; }
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.04);
+        padding: 20px;
+    }
+    label, p, h1, h2, h3, div { color: #333333 !important; }
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
+        color: #212529 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #ced4da;
+    }
+    [data-baseweb="select"] svg { fill: #212529 !important; }
+    div[data-testid="stForm"] button {
+        background-color: #28a745;
+        color: white !important;
+        font-weight: bold;
+        border: none;
+        border-radius: 6px;
+        padding: 10px;
+        transition: all 0.3s ease;
+    }
+    div[data-testid="stForm"] button:hover {
+        background-color: #218838;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+    }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
+# --- HEADER ---
+c_logo, c_title = st.columns([0.15, 0.85])
+with c_logo:
+    if os.path.exists("assets/logo.svg"): st.image("assets/logo.svg", width=90)
+    elif os.path.exists("assets/logo.png"): st.image("assets/logo.png", width=90)
+with c_title:
+    st.title("Editor de Sellos Automáticos")
+    st.markdown("Diseña tu **Queselló!** en tiempo real. Área de impresión: **36x15 mm**.")
+st.write("---")
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
@@ -118,18 +105,21 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- MOTOR GRÁFICO (PILLOW) ---
-def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black"):
+# --- MOTOR GRÁFICO (CON GUIAS ESCALABLES) ---
+def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
 
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
 
+    # Grosor dinámico del borde según escala
+    grosor_borde = max(2, int(scale / 5)) if dibujar_borde else 0
     if dibujar_borde:
-        grosor = 4 if color_borde == "red" else max(2, int(scale/5))
-        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor)
+        grosor_final = 4 if color_borde == "red" else grosor_borde
+        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor_final)
 
+    # Calcular centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
@@ -138,7 +128,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 
     y_cursor_base = (h_px - total_h_px) / 2
 
-    for linea in datos_lineas:
+    for i, linea in enumerate(datos_lineas):
         txt = linea['texto']
         f_path = linea['fuente']
         sz_pt = linea['size']
@@ -156,31 +146,52 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2
 
-        # Dibujar (Top-Left + Offset)
-        draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
+        # Posición Y final
+        y_final_px = y_cursor_base + offset_px
+
+        # Dibujar Texto
+        draw.text((x_pos, y_final_px), txt, font=font, fill="black")
+
+        # --- DIBUJAR GUÍAS TÉCNICAS (ESCALABLES) ---
+        if mostrar_guias:
+            color_guia = (0, 150, 255)
+
+            # Ajuste de grosores para HD
+            grosor_guia = max(1, int(scale / 10))
+            tamano_fuente_guia = int(8 * scale / 5) # ~8pt en preview, ~32pt en HD
+
+            # 1. Línea Base
+            y_base_guia = y_final_px + sz_px
+            draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
+
+            # 2. Cota
+            try: font_small = ImageFont.truetype("Arial", tamano_fuente_guia)
+            except: font_small = ImageFont.load_default()
+
+            pos_mm_real = y_base_guia / scale
+            label = f"L{i+1}: {pos_mm_real:.1f}mm"
+
+            # Dibujar cota
+            draw.text((grosor_guia * 2, y_base_guia - tamano_fuente_guia), label, font=font_small, fill=color_guia)
+
+            # 3. Caja delimitadora
+            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(200,200,200), width=grosor_guia)
 
         y_cursor_base += sz_px
 
     return img
 
 # --- GENERADOR PDF HÍBRIDO ---
-def generar_pdf_hibrido(datos_lineas, cliente):
+def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
-    # PÁGINA 1: VECTORIAL (Con corrección visual)
-    pdf.add_page()
-    pdf.set_margins(0,0,0)
-    pdf.set_auto_page_break(False, margin=0)
-
-    font_map = {}
-    font_counter = 1
+    # PÁG 1: Vectorial (Limpia)
+    pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
+    font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
         if ruta != "Arial" and os.path.exists(ruta):
             family_name = f"F{font_counter}"
-            try:
-                pdf.add_font(family_name, "", ruta)
-                font_map[ruta] = family_name
-                font_counter += 1
+            try: pdf.add_font(family_name, "", ruta); font_map[ruta] = family_name; font_counter += 1
             except: pass
 
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
@@ -190,24 +201,24 @@ def generar_pdf_hibrido(datos_lineas, cliente):
         ruta = l['fuente']
         fam = font_map.get(ruta, "Arial")
         pdf.set_font(fam, size=l['size'])
-
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
-
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
 
         altura_linea = l['size'] * FACTOR_PT_A_MM
-        # Corrección visual Top -> Baseline
         correction_baseline = altura_linea * 0.78
         y_final = y_base + l['offset_y'] + correction_baseline
 
         pdf.text(x_centered, y_final, txt)
         y_base += altura_linea
 
-    # PÁGINA 2: IMAGEN HD
+    # PÁG 2: IMAGEN HD (TESTIGO CON COTAS SI SE PIDIÓ)
     pdf.add_page()
-    img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False)
+
+    # Generar imagen HD, pasando el parámetro de guías que viene de la interfaz
+    img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
+
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
     img_hd.save(temp_path, quality=100, subsampling=0)
     pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
@@ -224,35 +235,20 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
         destinatario = st.secrets["email"]["destinatario"]
 
         msg = MIMEMultipart()
-        msg['From'] = remitente
-        msg['To'] = destinatario
-        msg['Subject'] = f"Pedido Quesello: {cliente}"
-        cuerpo = f"""
-        NUEVO PEDIDO RECIBIDO
-        ---------------------
-        Cliente: {cliente}
-        Email: {email_cliente}
-        Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-
-        ADJUNTO PDF (2 Páginas): Vectorial + Imagen HD
-        """
+        msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido Quesello: {cliente}"
+        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\nAdjunto PDF Híbrido (Vector + Imagen HD con Cotas)."
         msg.attach(MIMEText(cuerpo, 'plain'))
-
         part = MIMEBase('application', "octet-stream")
         part.set_payload(pdf_bytes)
         encoders.encode_base64(part)
         part.add_header('Content-Disposition', f'attachment; filename="{nombre_pdf}"')
         msg.attach(part)
-
         server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(remitente, password)
+        server.starttls(); server.login(remitente, password)
         server.sendmail(remitente, destinatario, msg.as_string())
         server.quit()
         return True
-    except Exception as e:
-        st.error(f"Error Email: {e}")
-        return False
+    except Exception as e: st.error(f"Error Email: {e}"); return False
 
 # --- INTERFAZ ---
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
@@ -260,13 +256,10 @@ col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 # --- COLUMNA IZQUIERDA ---
 with col_izq:
     st.subheader("🛠️ Configuración")
-
     with st.container(border=True):
         cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2)
-
     st.write("")
 
-    # Encabezados
     c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
     c_h1.markdown("**Texto**")
     c_h2.markdown("**Fuente**")
@@ -274,7 +267,6 @@ with col_izq:
     c_h4.markdown("**Pos. Y**")
 
     datos = []
-
     for i in range(cant):
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
@@ -286,15 +278,10 @@ with col_izq:
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1:
-                t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", label_visibility="collapsed")
-            with c2:
-                f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
-            with c3:
-                slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
-            with c4:
-                # CAMBIO AQUÍ: Ahora es un slider de -10.0 a 10.0 con paso de 0.5
-                offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed")
+            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed")
+            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
+            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
+            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed")
 
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
@@ -308,7 +295,6 @@ with col_izq:
 
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
-# Tolerancia de 1mm para que no sea tan estricto visualmente
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
 
 # --- COLUMNA DERECHA ---
@@ -319,6 +305,8 @@ with col_der:
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
+        # CHECKBOX DE GUÍAS
+        mostrar_guias = st.checkbox("📏 Mostrar Guías Técnicas (Se imprimirán en Pág 2)", value=False)
 
     if not es_valido_vertical:
         st.error("⛔ EXCESO DE ALTURA")
@@ -326,10 +314,11 @@ with col_der:
     else:
         color_borde = "black"
 
-    img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde)
+    # Preview
+    img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
     st.image(img_preview, use_container_width=True)
 
-    st.caption("Usa **Pos. Y** para mover verticalmente cada línea.")
+    st.caption("Usa **Pos. Y** para mover verticalmente.")
     st.write("---")
 
     if es_valido_vertical:
@@ -345,7 +334,8 @@ with col_der:
             if not nom: st.toast("Falta nombre", icon="⚠️")
             else:
                 with st.spinner("Procesando..."):
-                    pdf_bytes, f_name = generar_pdf_hibrido(datos, nom)
+                    # PASAMOS EL ESTADO DE 'MOSTRAR_GUIAS' AL GENERADOR PDF
+                    pdf_bytes, f_name = generar_pdf_hibrido(datos, nom, incluir_guias_hd=mostrar_guias)
                     enviado = enviar_email(pdf_bytes, f_name, nom, mail)
                     if enviado:
                         st.balloons()
