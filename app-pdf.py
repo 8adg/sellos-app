@@ -8,7 +8,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
-import tempfile
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -20,7 +19,7 @@ st.set_page_config(
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},      
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.0},      
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0}, 
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}  
 ]
@@ -93,6 +92,7 @@ FUENTES_DISPONIBLES = {
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
+SCALE = 20 
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
@@ -106,27 +106,22 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- MOTOR GRÁFICO UNIFICADO (PILLOW) ---
-def renderizar_imagen_sello(datos_lineas, scale_factor=20, dibujar_borde=True, color_borde="black"):
+# --- GENERADORES ---
+def generar_preview_imagen(datos_lineas, color_borde="black"):
     """
-    Genera la imagen del sello. 
-    Usamos esta MISMA función para la preview (baja res) y para el PDF (alta res).
+    Genera una imagen raster para mostrar en pantalla (Preview).
+    Usa coordenadas Top-Left.
     """
-    w_px = int(ANCHO_REAL_MM * scale_factor)
-    h_px = int(ALTO_REAL_MM * scale_factor)
-    
-    # Fondo blanco (CMYK friendly si fuera necesario, pero RGB ok para esto)
+    w_px = int(ANCHO_REAL_MM * SCALE)
+    h_px = int(ALTO_REAL_MM * SCALE)
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
+    draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=4 if color_borde=="red" else 1)
     
-    if dibujar_borde:
-        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=int(scale_factor/5))
-    
-    # Calcular altura total para centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
-        size_px = size_pt * FACTOR_PT_A_MM * scale_factor
+        size_px = size_pt * FACTOR_PT_A_MM * SCALE
         total_h_px += size_px
 
     y_cursor_base = (h_px - total_h_px) / 2
@@ -137,8 +132,8 @@ def renderizar_imagen_sello(datos_lineas, scale_factor=20, dibujar_borde=True, c
         sz_pt = linea['size']
         offset_mm = linea['offset_y']
         
-        sz_px = int(sz_pt * FACTOR_PT_A_MM * scale_factor)
-        offset_px = int(offset_mm * scale_factor)
+        sz_px = int(sz_pt * FACTOR_PT_A_MM * SCALE)
+        offset_px = int(offset_mm * SCALE)
         
         try:
             if f_path == "Arial": raise Exception
@@ -147,37 +142,68 @@ def renderizar_imagen_sello(datos_lineas, scale_factor=20, dibujar_borde=True, c
         
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2
+        x_pos = (w_px - text_w) / 2 
         
-        # Dibujamos en: Posición Base + Offset Manual
-        # Pillow dibuja desde Top-Left
+        # Pillow dibuja texto desde arriba (Top)
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
         
         y_cursor_base += sz_px
-    
     return img
 
 def generar_pdf_final(datos_lineas, cliente):
-    # 1. Generamos la imagen a MUY ALTA resolución (Escala 40 = ~1000 DPI)
-    # Sin borde para impresión
-    img_alta_res = renderizar_imagen_sello(datos_lineas, scale_factor=40, dibujar_borde=False)
-    
-    # 2. Guardamos la imagen en un archivo temporal
-    temp_img_path = f"temp_{datetime.now().strftime('%H%M%S%f')}.jpg"
-    img_alta_res.save(temp_img_path, quality=100, subsampling=0)
-    
-    # 3. Creamos el PDF y pegamos la imagen ocupando todo el espacio
+    """
+    Genera un PDF VECTORIAL REAL.
+    Ajusta la coordenada Y para convertir de Top (Pantalla) a Baseline (PDF).
+    """
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page()
     pdf.set_margins(0,0,0)
-    pdf.set_auto_page_break(False, margin=0)
+    pdf.set_auto_page_break(False, margin=0) 
     
-    # Pegar imagen en (0,0) con el ancho y alto total del sello
-    pdf.image(temp_img_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
+    # Cargar fuentes con nombres seguros
+    font_map = {} 
+    font_counter = 1
     
-    # Limpieza
-    try: os.remove(temp_img_path)
-    except: pass
+    for ruta in FUENTES_DISPONIBLES.values():
+        if ruta != "Arial" and os.path.exists(ruta):
+            family_name = f"CustomFont{font_counter}"
+            try:
+                pdf.add_font(family_name, "", ruta)
+                font_map[ruta] = family_name
+                font_counter += 1
+            except: pass
+
+    # Calcular posición Y inicial (Centrado)
+    h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
+    y_base = (ALTO_REAL_MM - h_total_mm) / 2
+    
+    for l in datos_lineas:
+        ruta = l['fuente']
+        fam = font_map.get(ruta, "Arial")
+        pdf.set_font(fam, size=l['size'])
+        
+        try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
+        except: txt = l['texto']
+        
+        # Centrado Horizontal Manual
+        txt_width = pdf.get_string_width(txt)
+        x_centered = (ANCHO_REAL_MM - txt_width) / 2
+        
+        # --- CORRECCIÓN DE COORDENADAS (EL SECRETO) ---
+        altura_linea_mm = l['size'] * FACTOR_PT_A_MM
+        
+        # FPDF escribe sobre la línea base. Pillow escribe desde el techo.
+        # La distancia del techo a la línea base es aprox el 78% del tamaño total.
+        factor_bajada = altura_linea_mm * 0.78
+        
+        # Posición Y = (Cursor donde empieza el bloque) + (Ajuste manual del usuario) + (Bajada a línea base)
+        y_final_baseline = y_base + l['offset_y'] + factor_bajada
+        
+        # Escribimos VECTORIALMENTE
+        pdf.text(x_centered, y_final_baseline, txt)
+        
+        # Avanzamos el cursor "techo" para la siguiente línea
+        y_base += altura_linea_mm
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
@@ -270,11 +296,10 @@ with col_der:
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
 
-    # PREVIEW (Escala 20, con borde)
-    img_preview = renderizar_imagen_sello(datos, scale_factor=20, dibujar_borde=True, color_borde="black")
+    img_preview = generar_preview_imagen(datos, "black")
     st.image(img_preview, use_container_width=True)
     
-    st.caption("Usa **Pos. Y** para subir (-) o bajar (+) cada línea.")
+    st.caption("Usa **Pos. Y** para ajustar la altura manualmente.")
     st.write("---")
     
     st.markdown("### ✅ Finalizar Pedido")
