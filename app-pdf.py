@@ -9,40 +9,13 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="Queselló! - Editor",
     page_icon="assets/logo.svg",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# --- 2. CONFIGURACIÓN ---
-# Asegúrate de tener los archivos .ttf en la carpeta assets/fonts/
-FUENTES_DISPONIBLES = {
-    "Aleo Regular": "assets/fonts/Aleo-Regular.ttf",
-    "Aleo Italic": "assets/fonts/Aleo-Italic.ttf",
-    "Amaze (Manuscrita)": "assets/fonts/amaze.ttf",
-    "Great Vibes": "assets/fonts/GreatVibes-Regular.ttf",
-    "Montserrat Regular": "assets/fonts/Montserrat-Regular.ttf",
-    "Montserrat SemiBold": "assets/fonts/Montserrat-SemiBold.ttf",
-    "Mukta Mahee": "assets/fonts/MuktaMahee-Regular.ttf",
-    "Mukta Mahee SemiBold": "assets/fonts/MuktaMahee-SemiBold.ttf",
-    "Playwrite": "assets/fonts/Playwrite-Regular.ttf",
-    "Roboto Regular": "assets/fonts/Roboto-Regular.ttf",
-    "Roboto Medium": "assets/fonts/Roboto-Medium.ttf",
-    "Arial (Sistema)": "Arial"
-}
-
-# --- CONSTANTES FÍSICAS ---
-# 1 Puntos (pt) = 0.3527 Milímetros (mm)
-FACTOR_PT_A_MM = 0.3527
-ANCHO_REAL_MM = 36
-ALTO_REAL_MM = 15
-
-# Escalas de renderizado
-SCALE_PREVIEW = 20  # Pantalla (buena velocidad)
-SCALE_HD = 80       # Impresión (calidad extrema, ~2000 DPI)
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
@@ -51,7 +24,7 @@ EJEMPLO_INICIAL = [
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
 ]
 
-# --- 3. ESTILOS CSS (UI TUNEADA) ---
+# --- 🎨 ESTILOS CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
@@ -65,16 +38,15 @@ st.markdown("""
         padding: 20px;
     }
 
-    /* Textos oscuros para legibilidad */
+    /* Textos oscuros */
     label, p, h1, h2, h3, div { color: #333333 !important; }
 
     /* Inputs */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
         color: #212529 !important;
         background-color: #ffffff !important;
         border: 1px solid #ced4da;
     }
-    /* Flechas negras */
     [data-baseweb="select"] svg { fill: #212529 !important; }
 
     /* Botón Principal */
@@ -99,7 +71,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. HEADER ---
+# --- HEADER ---
 c_logo, c_title = st.columns([0.15, 0.85])
 with c_logo:
     if os.path.exists("assets/logo.svg"): st.image("assets/logo.svg", width=90)
@@ -109,7 +81,32 @@ with c_title:
     st.markdown("Diseña tu **Queselló!** en tiempo real. Área de impresión: **36x15 mm**.")
 st.write("---")
 
-# --- 5. HELPERS ---
+# --- 1. CONFIGURACIÓN ---
+FUENTES_DISPONIBLES = {
+    "Aleo Regular": "assets/fonts/Aleo-Regular.ttf",
+    "Aleo Italic": "assets/fonts/Aleo-Italic.ttf",
+    "Amaze (Manuscrita)": "assets/fonts/amaze.ttf",
+    "Great Vibes": "assets/fonts/GreatVibes-Regular.ttf",
+    "Montserrat Regular": "assets/fonts/Montserrat-Regular.ttf",
+    "Montserrat SemiBold": "assets/fonts/Montserrat-SemiBold.ttf",
+    "Mukta Mahee": "assets/fonts/MuktaMahee-Regular.ttf",
+    "Mukta Mahee SemiBold": "assets/fonts/MuktaMahee-SemiBold.ttf",
+    "Playwrite": "assets/fonts/Playwrite-Regular.ttf",
+    "Roboto Regular": "assets/fonts/Roboto-Regular.ttf",
+    "Roboto Medium": "assets/fonts/Roboto-Medium.ttf",
+    "Arial (Sistema)": "Arial"
+}
+
+# --- CONSTANTES FÍSICAS ---
+FACTOR_PT_A_MM = 0.3527
+ANCHO_REAL_MM = 36
+ALTO_REAL_MM = 15
+
+# Escalas
+SCALE_PREVIEW = 20
+SCALE_HD = 80
+
+# --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     if not texto: return 0
     scale_measure = 10
@@ -121,12 +118,8 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- 6. MOTOR GRÁFICO (PILLOW) ---
+# --- MOTOR GRÁFICO (PILLOW) ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black"):
-    """
-    Motor único de renderizado.
-    Usa coordenadas Top-Left (Estándar de imagen).
-    """
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
 
@@ -134,21 +127,17 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
     draw = ImageDraw.Draw(img)
 
     if dibujar_borde:
-        # El grosor del borde escala con la imagen para verse bien en HD
         grosor = 4 if color_borde == "red" else max(2, int(scale/5))
         draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor)
 
-    # 1. Calcular altura total del bloque de texto
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
         size_px = size_pt * FACTOR_PT_A_MM * scale
         total_h_px += size_px
 
-    # 2. Determinar punto de inicio vertical (Centrado)
     y_cursor_base = (h_px - total_h_px) / 2
 
-    # 3. Dibujar cada línea
     for linea in datos_lineas:
         txt = linea['texto']
         f_path = linea['fuente']
@@ -163,41 +152,37 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             font = ImageFont.truetype(f_path, sz_px)
         except: font = ImageFont.load_default()
 
-        # Centrado Horizontal
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2
 
-        # Posición Y: Base automática + Offset manual
+        # Dibujar (Top-Left + Offset)
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
 
-        # Avanzar cursor base
         y_cursor_base += sz_px
 
     return img
 
-# --- 7. GENERADOR PDF HÍBRIDO ---
+# --- GENERADOR PDF HÍBRIDO ---
 def generar_pdf_hibrido(datos_lineas, cliente):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
-    # --- PÁGINA 1: VECTORIAL (EDITABLE) ---
+    # PÁGINA 1: VECTORIAL (Con corrección visual)
     pdf.add_page()
     pdf.set_margins(0,0,0)
     pdf.set_auto_page_break(False, margin=0)
 
-    # Cargar fuentes en FPDF
     font_map = {}
     font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
         if ruta != "Arial" and os.path.exists(ruta):
-            family_name = f"F{font_counter}" # Nombre corto y seguro
+            family_name = f"F{font_counter}"
             try:
                 pdf.add_font(family_name, "", ruta)
                 font_map[ruta] = family_name
                 font_counter += 1
             except: pass
 
-    # Cálculo vertical
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
 
@@ -209,39 +194,29 @@ def generar_pdf_hibrido(datos_lineas, cliente):
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
 
-        # Centrado Horizontal
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
 
-        # Corrección visual: De Top (Pillow) a Baseline (FPDF)
-        # Bajamos el cursor un ~78% de la altura de la letra
         altura_linea = l['size'] * FACTOR_PT_A_MM
-        correction = altura_linea * 0.78
-        y_final = y_base + l['offset_y'] + correction
+        # Corrección visual Top -> Baseline
+        correction_baseline = altura_linea * 0.78
+        y_final = y_base + l['offset_y'] + correction_baseline
 
         pdf.text(x_centered, y_final, txt)
         y_base += altura_linea
 
-    # --- PÁGINA 2: IMAGEN HD (TESTIGO) ---
+    # PÁGINA 2: IMAGEN HD
     pdf.add_page()
-
-    # Generar imagen HD (aprox 2800x1200 px)
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False)
-
-    # Guardar temporal
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
     img_hd.save(temp_path, quality=100, subsampling=0)
-
-    # Insertar en PDF
     pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
-
-    # Limpieza
     if os.path.exists(temp_path): os.remove(temp_path)
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
-# --- 8. EMAIL ---
+# --- EMAIL ---
 def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
     try:
         remitente = st.secrets["email"]["usuario"]
@@ -259,9 +234,7 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
         Email: {email_cliente}
         Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
-        ARCHIVOS ADJUNTOS EN EL PDF:
-        Página 1: Vectorial (Editable para producción)
-        Página 2: Imagen HD (Testigo de diseño exacto)
+        ADJUNTO PDF (2 Páginas): Vectorial + Imagen HD
         """
         msg.attach(MIMEText(cuerpo, 'plain'))
 
@@ -281,11 +254,10 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
         st.error(f"Error Email: {e}")
         return False
 
-# --- 9. INTERFAZ ---
-
+# --- INTERFAZ ---
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 
-# --- COLUMNA IZQUIERDA: CONTROLES ---
+# --- COLUMNA IZQUIERDA ---
 with col_izq:
     st.subheader("🛠️ Configuración")
 
@@ -304,7 +276,6 @@ with col_izq:
     datos = []
 
     for i in range(cant):
-        # Defaults
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
@@ -315,10 +286,15 @@ with col_izq:
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed")
-            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
-            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
-            with c4: offset = st.number_input(f"o{i}", -10.0, 10.0, value=def_off, step=0.5, key=f"oi{i}", label_visibility="collapsed")
+            with c1:
+                t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", label_visibility="collapsed")
+            with c2:
+                f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
+            with c3:
+                slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
+            with c4:
+                # CAMBIO AQUÍ: Ahora es un slider de -10.0 a 10.0 con paso de 0.5
+                offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed")
 
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
@@ -332,10 +308,10 @@ with col_izq:
 
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
-# Validamos altura (con un pequeño margen de tolerancia de 0.5mm)
-es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -0.5
+# Tolerancia de 1mm para que no sea tan estricto visualmente
+es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
 
-# --- COLUMNA DERECHA: PREVIEW ---
+# --- COLUMNA DERECHA ---
 with col_der:
     st.subheader("👁️ Vista Previa")
 
@@ -345,16 +321,15 @@ with col_der:
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
 
     if not es_valido_vertical:
-        st.error("⛔ EXCESO DE ALTURA (El texto se sale del sello)")
+        st.error("⛔ EXCESO DE ALTURA")
         color_borde = "red"
     else:
         color_borde = "black"
 
-    # Preview (Scale 20)
     img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde)
     st.image(img_preview, use_container_width=True)
 
-    st.caption("Ajusta **Pos. Y** para perfeccionar el espaciado vertical.")
+    st.caption("Usa **Pos. Y** para mover verticalmente cada línea.")
     st.write("---")
 
     if es_valido_vertical:
@@ -369,9 +344,9 @@ with col_der:
         if submitted:
             if not nom: st.toast("Falta nombre", icon="⚠️")
             else:
-                with st.spinner("Procesando archivos..."):
+                with st.spinner("Procesando..."):
                     pdf_bytes, f_name = generar_pdf_hibrido(datos, nom)
                     enviado = enviar_email(pdf_bytes, f_name, nom, mail)
                     if enviado:
                         st.balloons()
-                        st.success(f"¡Pedido de **{nom}** enviado correctamente!")
+                        st.success(f"¡Pedido de {nom} enviado!")
