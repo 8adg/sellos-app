@@ -106,29 +106,19 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     return width_px / scale_measure
 
 def get_font_metrics_mm(ruta_fuente, size_pt):
-    """
-    Calcula el 'Ascent' (distancia del techo a la línea base) en milímetros
-    para una fuente y tamaño específicos. Clave para alinear PDF y Preview.
-    """
     try:
-        # Usamos una escala alta para precisión
         scale = 100
         size_px = int(size_pt * FACTOR_PT_A_MM * scale)
-
         if ruta_fuente == "Arial" or not os.path.exists(ruta_fuente):
-            font = ImageFont.load_default()
-            # Default font fallback metrics
             ascent = size_px * 0.8
         else:
             font = ImageFont.truetype(ruta_fuente, size_px)
             ascent, descent = font.getmetrics()
-
-        # Convertimos de vuelta a mm
         return ascent / scale
     except:
-        return (size_pt * FACTOR_PT_A_MM) * 0.78 # Fallback genérico
+        return (size_pt * FACTOR_PT_A_MM) * 0.78
 
-# --- MOTOR GRÁFICO (CON COTAS GRANDES) ---
+# --- MOTOR GRÁFICO (COTAS AJUSTADAS) ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
@@ -140,7 +130,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         grosor = 4 if color_borde == "red" else max(2, int(scale/5))
         draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor)
 
-    # Calcular centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
@@ -173,16 +162,16 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         # Dibujar Texto
         draw.text((x_pos, y_final_px), txt, font=font, fill="black")
 
-        # --- DIBUJAR GUÍAS TÉCNICAS (MEJORADAS) ---
+        # --- GUÍAS TÉCNICAS (FINAS) ---
         if mostrar_guias:
             color_guia = (0, 150, 255)
-            grosor_guia = max(1, int(scale / 10))
+            grosor_guia = max(1, int(scale / 20)) # Mucho más fino
 
-            # AUMENTO DE TAMAÑO DE FUENTE DE COTAS
-            # Antes: scale/5 -> Ahora: scale/2.5 (El doble de grande)
-            tamano_fuente_guia = int(8 * scale / 2.5)
+            # --- AJUSTE DE TAMAÑO DE COTA ---
+            # Hacemos la fuente mucho más pequeña relativa a la imagen
+            # Antes: scale/2.5 -> Ahora: scale/6
+            tamano_fuente_guia = int(8 * scale / 6)
 
-            # Obtener métricas reales para dibujar la línea azul donde corresponde
             try: ascent, descent = font.getmetrics()
             except: ascent = sz_px * 0.8
 
@@ -191,18 +180,18 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             # 1. Línea Base
             draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
 
-            # 2. Cota (Texto más grande y legible)
+            # 2. Cota (Pequeña y a la izquierda)
             try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_guia)
             except: font_small = ImageFont.load_default()
 
             pos_mm_real = y_base_guia / scale
-            label = f"L{i+1}: {pos_mm_real:.1f}mm"
+            label = f"L{i+1}:{pos_mm_real:.1f}"
 
-            # Dibujar cota un poco más arriba para que no toque la línea
-            draw.text((grosor_guia * 2, y_base_guia - tamano_fuente_guia * 1.2), label, font=font_small, fill=color_guia)
+            # Dibujar cota a la izquierda (X=2px) para no molestar
+            draw.text((scale * 0.5, y_base_guia - tamano_fuente_guia), label, font=font_small, fill=color_guia)
 
-            # 3. Caja delimitadora (Gris suave)
-            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(200,200,200), width=grosor_guia)
+            # 3. Caja delimitadora (Gris muy suave)
+            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(220,220,220), width=1)
 
         y_cursor_base += sz_px
 
@@ -212,7 +201,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
-    # PÁG 1: Vectorial (Sincronizado)
+    # PÁG 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -221,7 +210,6 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
             try: pdf.add_font(family_name, "", ruta); font_map[ruta] = family_name; font_counter += 1
             except: pass
 
-    # Mismo cálculo de altura total que en la preview
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
 
@@ -229,23 +217,15 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         ruta = l['fuente']
         fam = font_map.get(ruta, "Arial")
         pdf.set_font(fam, size=l['size'])
-
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
-
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
 
-        # --- SINCRONIZACIÓN MATEMÁTICA ---
-        # Obtenemos el 'ascent' real de esta fuente en mm
         ascent_mm = get_font_metrics_mm(ruta, l['size'])
-
-        # Posición Y (Línea Base) = (Top Calculado) + (Offset Usuario) + (Ascent Real)
         y_final_baseline = y_base + l['offset_y'] + ascent_mm
 
         pdf.text(x_centered, y_final_baseline, txt)
-
-        # Avanzar cursor 'top'
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
     # PÁG 2: IMAGEN HD
