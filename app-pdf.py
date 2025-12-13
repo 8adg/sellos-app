@@ -11,8 +11,8 @@ from email import encoders
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Queselló! - Editor",
-    page_icon="assets/logo.svg",
+    page_title="Queselló! - Editor", 
+    page_icon="assets/logo.svg", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -153,7 +153,6 @@ def generar_pdf_final(datos_lineas, cliente):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page()
     pdf.set_margins(0,0,0)
-    # IMPORTANTE: Desactivar salto de página automático para que el offset no rompa nada
     pdf.set_auto_page_break(False, margin=0) 
     
     # Cargar fuentes
@@ -172,30 +171,37 @@ def generar_pdf_final(datos_lineas, cliente):
     # Calcular posición Y inicial (Centrado)
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
-    
+    if y_base < 0: y_base = 0
+
     for l in datos_lineas:
         ruta = l['fuente']
         fam = font_map.get(ruta, "Arial")
         pdf.set_font(fam, size=l['size'])
         
-        # Posición Base + Offset Manual
-        y_final = y_base + l['offset_y']
-        
-        # Movemos el cursor de FPDF explícitamente
-        pdf.set_xy(0, y_final)
-        
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
         
-        # Altura de la línea
-        h_linea_mm = l['size'] * FACTOR_PT_A_MM
+        # --- CÁLCULO PRECISO PARA SINCRONIZAR CON PREVIEW ---
+        # 1. Calculamos el ancho para centrar manualmente
+        ancho_txt = pdf.get_string_width(txt)
+        x_centered = (ANCHO_REAL_MM - ancho_txt) / 2
         
-        # Usamos CELL porque dibuja desde el TOP (igual que Pillow)
-        # Esto debería sincronizar la vista previa con el PDF
-        pdf.cell(w=ANCHO_REAL_MM, h=h_linea_mm, text=txt, border=0, align='C')
+        # 2. Corrección de Línea Base
+        # Pillow dibuja en Y=Top. FPDF dibuja en Y=Baseline.
+        # Necesitamos bajar el cursor la altura del "Ascender" de la fuente.
+        # Factor aprox: 0.75 del tamaño total.
+        altura_linea = l['size'] * FACTOR_PT_A_MM
+        correccion_baseline = altura_linea * 0.75
         
-        # Avanzamos el cursor base
-        y_base += h_linea_mm
+        # 3. Posición Final
+        # Y_Base (Cursor) + Offset Manual + Corrección Baseline
+        y_final = y_base + l['offset_y'] + correccion_baseline
+        
+        # Usamos .text() que es coordenada absoluta, no .cell()
+        pdf.text(x_centered, y_final, txt)
+        
+        # Avanzamos el cursor base por la altura de la línea (sin contar offset)
+        y_base += altura_linea
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
