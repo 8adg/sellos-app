@@ -11,23 +11,19 @@ from email import encoders
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Queselló! - Editor",
-    page_icon="assets/logo.svg",
+    page_title="Queselló! - Editor", 
+    page_icon="assets/logo.svg", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# --- DATOS DE EJEMPLO (SIMULACIÓN INICIAL) ---
-# Definimos qué mostrar apenas carga la app
+# --- DATOS DE EJEMPLO (CON OFFSET) ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16},      # Amaze (Manuscrita)
-    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 9}, # Montserrat SemiBold
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7}  # Montserrat Regular
+    # Offset negativo para subir un poco la firma manuscrita
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -2.0},      
+    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0}, 
+    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}  
 ]
-# --- DATOS DE EJEMPLO (ACTUALIZADO A NUEVAS FUENTES) ---
-# Índices basados en el nuevo orden del diccionario de arriba:
-# 0: Aleo Reg, 1: Aleo It, 2: Amaze, 3: Great Vibes,
-# 4: Mont Reg, 5: Mont SemiBold, 6: Mukta, 7: Mukta SB...
 
 # --- 🎨 ESTILOS CSS ---
 st.markdown("""
@@ -40,27 +36,26 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         padding: 15px;
     }
-    [data-testid="stVerticalBlockBorderWrapper"] label,
+    [data-testid="stVerticalBlockBorderWrapper"] label, 
     [data-testid="stVerticalBlockBorderWrapper"] p,
     [data-testid="stVerticalBlockBorderWrapper"] h1,
     [data-testid="stVerticalBlockBorderWrapper"] h2,
     [data-testid="stVerticalBlockBorderWrapper"] h3 {
         color: #212529 !important;
     }
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
+    /* Inputs y Selects */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
         color: #212529 !important;
         background-color: #DADADA !important;
         border-color: #666;
     }
-
-     /* --- CORRECCIÓN DE FLECHAS (ARROWS) --- */
-    /* Fuerza a los iconos SVG (flechitas) a ser negros */
-    [data-baseweb="select"] svg {
-        fill: #212529 !important;
-    }
-
+    
+    /* Flechas negras en dropdowns */
+    [data-baseweb="select"] svg { fill: #212529 !important; }
+    
+    /* Botón */
     div[data-testid="stForm"] button {
-        background-color: #000000;
+        background-color: #000000; 
         color: white;
         font-weight: bold;
         border-radius: 8px;
@@ -87,7 +82,7 @@ with c_title:
     st.markdown("Diseña tu **Queselló!** en tiempo real. Tamaño: **36x15 mm**.")
 st.write("---")
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN DE FUENTES (NUEVA LISTA) ---
 FUENTES_DISPONIBLES = {
     "Aleo Regular": "assets/fonts/Aleo-Regular.ttf",
     "Aleo Italic": "assets/fonts/Aleo-Italic.ttf",
@@ -107,12 +102,12 @@ FUENTES_DISPONIBLES = {
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
-SCALE = 20
+SCALE = 20 
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     if not texto: return 0
-    scale_measure = 10
+    scale_measure = 10 
     size_px = int(size_pt * FACTOR_PT_A_MM * scale_measure)
     try:
         if ruta_fuente == "Arial": raise Exception
@@ -128,37 +123,47 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
     draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=4 if color_borde=="red" else 1)
-
+    
+    # 1. Calcular altura total "natural" (sin offsets) para el centrado base
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
         size_px = size_pt * FACTOR_PT_A_MM * SCALE
         total_h_px += size_px
 
-    y_cursor = (h_px - total_h_px) / 2
+    # Punto de inicio centrado
+    y_cursor_base = (h_px - total_h_px) / 2
 
     for linea in datos_lineas:
         txt = linea['texto']
         f_path = linea['fuente']
         sz_pt = linea['size']
+        offset_mm = linea['offset_y'] # Leemos el offset manual
+        
         sz_px = int(sz_pt * FACTOR_PT_A_MM * SCALE)
+        offset_px = int(offset_mm * SCALE)
+        
         try:
             if f_path == "Arial": raise Exception
             font = ImageFont.truetype(f_path, sz_px)
         except: font = ImageFont.load_default()
-
+        
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2
-        draw.text((x_pos, y_cursor), txt, font=font, fill="black")
-        y_cursor += sz_px
+        x_pos = (w_px - text_w) / 2 
+        
+        # Dibujamos en: Posición Base + Offset Manual
+        draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
+        
+        # El cursor base avanza naturalmente para la siguiente línea
+        y_cursor_base += sz_px
     return img
 
 def generar_pdf_final(datos_lineas, cliente):
     pdf = FPDF('P', 'mm', (ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, 0)
     for _, ruta in FUENTES_DISPONIBLES.items():
-        if os.path.exists(ruta):
+        if os.path.exists(ruta): 
             try: pdf.add_font(os.path.basename(ruta).split('.')[0], "", ruta)
             except: pass
 
@@ -170,13 +175,20 @@ def generar_pdf_final(datos_lineas, cliente):
         fam = "Arial"
         if os.path.exists(l['fuente']): fam = os.path.basename(l['fuente']).split('.')[0]
         pdf.set_font(fam, size=l['size'])
-        pdf.set_xy(0, y)
+        
+        # Posición final = Cursor automático + Offset manual
+        y_final = y + l['offset_y']
+        pdf.set_xy(0, y_final)
+        
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
         h_linea_mm = l['size'] * FACTOR_PT_A_MM
+        
         pdf.cell(ANCHO_REAL_MM, h_linea_mm, txt, 0, 0, 'C')
+        
+        # Avanzar cursor base
         y += h_linea_mm
-
+        
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
@@ -215,92 +227,94 @@ col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 # --- COLUMNA IZQUIERDA ---
 with col_izq:
     st.subheader("🛠️ Configuración")
-
+    
     with st.container(border=True):
-        # Index 2 = 3 líneas (el array empieza en 0, 1, 2)
+        # Index 2 = 3 líneas
         cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2)
-
+    
     st.write("")
-
-    c_h1, c_h2, c_h3 = st.columns([3, 2, 2])
+    
+    # Encabezados con la 4ta columna para Offset
+    c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
     c_h1.markdown("**Texto**")
     c_h2.markdown("**Fuente**")
-    c_h3.markdown("**Tamaño (Slider)**")
-
+    c_h3.markdown("**Tamaño**")
+    c_h4.markdown("**Pos. Y**")
+    
     datos = []
-
+    
     for i in range(cant):
-        # LOGICA DE DEFAULT
-        # Si la línea 'i' existe en nuestro ejemplo, usamos esos datos. Si no, datos vacíos.
+        # Carga de defaults
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
             def_sz = EJEMPLO_INICIAL[i]["size"]
+            # Si el ejemplo tiene offset definido lo usa, sino 0.0
+            def_off = EJEMPLO_INICIAL[i].get("offset", 0.0)
         else:
             def_txt = ""
             def_idx = 0
             def_sz = 9
+            def_off = 0.0
 
         with st.container(border=True):
-            c1, c2, c3 = st.columns([3, 2, 2])
+            c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
             with c1:
                 t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed")
             with c2:
                 f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
             with c3:
                 slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
-
+            with c4:
+                # CONTROL OFFSET: Paso de 0.5mm
+                offset = st.number_input(f"o{i}", -10.0, 10.0, value=def_off, step=0.5, key=f"oi{i}", label_visibility="collapsed", help="Negativo=Subir / Positivo=Bajar")
+            
             # Validación Ancho
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
-
+            
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
-                st.warning(f"Ajustado a {size_final}pt (Máx ancho)")
-
-            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final})
+                st.warning(f"Ajustado a {size_final}pt (Ancho)")
+            
+            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset})
 
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
-es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= 0
+# Consideramos válido, dejando al usuario juzgar visualmente si los offsets se salen
+es_valido_vertical = True 
 
 # --- COLUMNA DERECHA ---
 with col_der:
     st.subheader("👁️ Vista Previa")
-
+    
     with st.container(border=True):
         m1, m2 = st.columns(2)
-        m1.metric("Altura Usada", f"{altura_total_usada_mm:.1f} mm")
-        m2.metric("Disponible", f"{ALTO_REAL_MM} mm", delta_color="normal")
+        m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
+        m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
 
-    if not es_valido_vertical:
-        st.error("⛔ EXCESO DE ALTURA")
-        color_borde = "red"
-    else:
-        color_borde = "black"
-
-    img_preview = generar_preview_imagen(datos, color_borde)
+    img_preview = generar_preview_imagen(datos, "black")
     st.image(img_preview, use_container_width=True)
-
+    
+    st.caption("Usa **Pos. Y** para ajustar la altura manualmente si las letras se tocan.")
     st.write("---")
-
-    if es_valido_vertical:
-        st.markdown("### ✅ Finalizar Pedido")
-        with st.form("form_pedido", border=True):
-            st.write("Datos de contacto:")
-            c_nom, c_mail = st.columns(2)
-            with c_nom: nom = st.text_input("Nombre")
-            with c_mail: mail = st.text_input("Email")
-            submitted = st.form_submit_button("💾 CONFIRMAR PEDIDO")
-
-        if submitted:
-            if not nom: st.toast("Falta nombre", icon="⚠️")
-            else:
-                with st.spinner("Procesando..."):
-                    pdf_bytes, f_name = generar_pdf_final(datos, nom)
-                    enviado = enviar_email(pdf_bytes, f_name, nom, mail)
-                    if enviado:
-                        st.balloons()
-                        st.success(f"¡Pedido de {nom} enviado!")
+    
+    st.markdown("### ✅ Finalizar Pedido")
+    with st.form("form_pedido", border=True):
+        st.write("Datos de contacto:")
+        c_nom, c_mail = st.columns(2)
+        with c_nom: nom = st.text_input("Nombre")
+        with c_mail: mail = st.text_input("Email")
+        submitted = st.form_submit_button("💾 CONFIRMAR PEDIDO")
+    
+    if submitted:
+        if not nom: st.toast("Falta nombre", icon="⚠️")
+        else:
+            with st.spinner("Procesando..."):
+                pdf_bytes, f_name = generar_pdf_final(datos, nom)
+                enviado = enviar_email(pdf_bytes, f_name, nom, mail)
+                if enviado:
+                    st.balloons()
+                    st.success(f"¡Pedido de {nom} enviado!")
