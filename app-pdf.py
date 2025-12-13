@@ -9,7 +9,7 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 import uuid
-import mercadopago # LIBRERÍA NUEVA
+import mercadopago
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -20,10 +20,8 @@ st.set_page_config(
 )
 
 # --- CONFIGURACIÓN COMERCIAL ---
-PRECIO_SELLO = 20500 # Precio en ARS
+PRECIO_SELLO = 20500
 MP_ACCESS_TOKEN = st.secrets["mercadopago"]["access_token"]
-
-# Inicializar SDK de Mercado Pago
 mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 
 # --- 1. CONFIGURACIÓN ---
@@ -75,27 +73,26 @@ st.markdown("""
     }
     [data-baseweb="select"] svg { fill: #212529 !important; }
 
-    /* Botón Pagar (Azul Mercado Pago) */
-    .btn-pagar {
-        background-color: #009EE3 !important;
-        color: white !important;
-        border: none;
-        padding: 10px;
-        border-radius: 5px;
-        text-align: center;
-        text-decoration: none;
-        display: block;
+    /* Botones Personalizados */
+    .stButton button {
+        width: 100%;
+        border-radius: 8px;
         font-weight: bold;
+        transition: all 0.3s ease;
     }
-    .btn-pagar:hover { background-color: #007bbd !important; }
 
-    /* Botón Verificar (Verde) */
+    /* Botón CONFIRMAR DISEÑO (Negro) */
     div[data-testid="stForm"] button {
-        background-color: #28a745;
-        color: white !important;
-        font-weight: bold;
+        background-color: #000000;
+        color: white;
+        border: none;
+    }
+    div[data-testid="stForm"] button:hover {
+        background-color: #333333;
+        color: white;
     }
 
+    /* Ocultar menú default */
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -172,6 +169,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2
         y_visual_px = y_cursor_base + offset_px
+
         draw.text((x_pos, y_visual_px), txt, font=font, fill="black")
 
         if mostrar_guias:
@@ -234,7 +232,8 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
-def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente, id_pago):
+# --- EMAIL ---
+def enviar_email(pdf_bytes, nombre_pdf, cliente, wpp_cliente, id_pago):
     try:
         remitente = st.secrets["email"]["usuario"]
         password = st.secrets["email"]["password"]
@@ -242,11 +241,13 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente, id_pago):
 
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
+
+        # CAMBIO: Cuerpo del mail con WhatsApp
         cuerpo = f"""
         NUEVO PEDIDO CONFIRMADO
         -----------------------
         Cliente: {cliente}
-        Email: {email_cliente}
+        WhatsApp: {wpp_cliente}
         ID Pago MP: {id_pago}
         Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}
         """
@@ -263,68 +264,43 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente, id_pago):
         return True
     except Exception as e: st.error(f"Error Email: {e}"); return False
 
-# --- LÓGICA MERCADO PAGO ---
+# --- MP UTILS ---
 def crear_preferencia_pago(nombre_cliente, ref_id):
     preference_data = {
-        "items": [
-            {
-                "title": f"Sello Personalizado - {nombre_cliente}",
-                "quantity": 1,
-                "unit_price": PRECIO_SELLO,
-                "currency_id": "ARS"
-            }
-        ],
+        "items": [{"title": f"Sello - {nombre_cliente}", "quantity": 1, "unit_price": PRECIO_SELLO, "currency_id": "ARS"}],
         "external_reference": ref_id,
-        "back_urls": {
-            "success": "https://www.google.com", # Redirección simple (el usuario vuelve a la app)
-            "failure": "https://www.google.com",
-            "pending": "https://www.google.com"
-        },
+        "back_urls": {"success": "https://www.google.com", "failure": "https://www.google.com", "pending": "https://www.google.com"},
         "auto_return": "approved"
     }
     try:
-        preference_response = mp_sdk.preference().create(preference_data)
-        return preference_response["response"]["init_point"]
-    except Exception as e:
-        st.error(f"Error creando pago: {e}")
-        return None
+        res = mp_sdk.preference().create(preference_data)
+        return res["response"]["init_point"]
+    except Exception as e: st.error(f"Error MP: {e}"); return None
 
 def verificar_pago_mp(ref_id):
-    """Busca si existe un pago aprobado con esa referencia"""
-    filters = {
-        "external_reference": ref_id,
-        "status": "approved"
-    }
+    filters = {"external_reference": ref_id, "status": "approved"}
     try:
-        # Buscamos en la API de Mercado Pago
-        search_result = mp_sdk.payment().search(filters)
-        if search_result["response"]["results"]:
-            # Devolvemos el ID del pago real
-            return search_result["response"]["results"][0]["id"]
+        res = mp_sdk.payment().search(filters)
+        if res["response"]["results"]: return res["response"]["results"][0]["id"]
         return None
-    except Exception as e:
-        # En caso de error de conexión, devolvemos None
-        return None
+    except: return None
 
-# --- ESTADO DE SESIÓN (Persistencia del pedido) ---
-if 'pedido_id' not in st.session_state:
-    st.session_state.pedido_id = str(uuid.uuid4()) # ID único para esta sesión
-
-if 'paso_actual' not in st.session_state:
-    st.session_state.paso_actual = 1 # 1: Diseño, 2: Pago
+# --- ESTADO DE SESIÓN ---
+if 'pedido_id' not in st.session_state: st.session_state.pedido_id = str(uuid.uuid4())
+if 'step' not in st.session_state: st.session_state.step = 'diseño' # diseño -> datos -> pago
 
 # --- INTERFAZ ---
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 
-# --- COLUMNA IZQUIERDA ---
+# BLOQUEO DE EDICIÓN: Si no estamos en paso 'diseño', deshabilitamos controles
+inputs_disabled = st.session_state.step != 'diseño'
+
+# --- COLUMNA IZQUIERDA: DISEÑO ---
 with col_izq:
     st.subheader("🛠️ Configuración")
 
-    # Bloquear edición si ya estamos pagando
-    disabled = st.session_state.paso_actual == 2
-
     with st.container(border=True):
-        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=disabled)
+        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
     st.write("")
 
     c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
@@ -345,10 +321,10 @@ with col_izq:
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", label_visibility="collapsed", disabled=disabled)
-            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=disabled)
-            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=disabled)
-            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=disabled)
+            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
@@ -364,7 +340,7 @@ with col_izq:
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
 
-# --- COLUMNA DERECHA ---
+# --- COLUMNA DERECHA: FLUJO ---
 with col_der:
     st.subheader("👁️ Vista Previa")
 
@@ -372,7 +348,7 @@ with col_der:
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
-        mostrar_guias = st.checkbox("📏 Mostrar Guías", value=False, disabled=disabled)
+        mostrar_guias = st.checkbox("📏 Guías Técnicas", value=False, disabled=inputs_disabled)
 
     if not es_valido_vertical:
         st.error("⛔ EXCESO DE ALTURA")
@@ -382,69 +358,81 @@ with col_der:
 
     img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
     st.image(img_preview, use_container_width=True)
-
     st.write("---")
 
+    # --- FLUJO DE PASOS ---
+
     if es_valido_vertical:
-        # --- PASO 1: DATOS Y GENERAR LINK ---
-        if st.session_state.paso_actual == 1:
-            st.markdown("### ✅ 1. Confirmar Diseño")
-            with st.form("form_inicio_pago", border=True):
-                nom = st.text_input("Nombre Cliente")
-                mail = st.text_input("Email Cliente")
-                # Guardamos esto en session state para usarlo luego
-                generar = st.form_submit_button("💳 IR A PAGAR")
+        # PASO 1: DISEÑO -> CLICK CONFIRMAR
+        if st.session_state.step == 'diseño':
+            if st.button("✅ CONFIRMAR DISEÑO", use_container_width=True, type="primary"):
+                st.session_state.step = 'datos'
+                st.rerun()
 
-            if generar:
-                if not nom: st.toast("Falta nombre", icon="⚠️")
+        # PASO 2: DATOS -> FORMULARIO WHATSAPP
+        elif st.session_state.step == 'datos':
+            st.info("🔒 Diseño bloqueado. Completa tus datos para pagar.")
+
+            with st.form("form_datos"):
+                st.write("Tus Datos:")
+                c_nom, c_wpp = st.columns(2)
+                with c_nom: nom = st.text_input("Nombre Completo")
+                with c_wpp: wpp = st.text_input("WhatsApp (con cód. área)")
+
+                # Botón dentro del form
+                ir_pago = st.form_submit_button("💳 IR A PAGAR")
+
+            # Botón Volver fuera del form
+            if st.button("⬅️ Volver a Editar"):
+                st.session_state.step = 'diseño'
+                st.rerun()
+
+            if ir_pago:
+                if not nom or not wpp:
+                    st.toast("Completa nombre y WhatsApp", icon="⚠️")
                 else:
-                    # Guardamos datos
                     st.session_state.cliente_nombre = nom
-                    st.session_state.cliente_email = mail
+                    st.session_state.cliente_wpp = wpp
 
-                    # Generamos Link
-                    link_pago = crear_preferencia_pago(nom, st.session_state.pedido_id)
-                    if link_pago:
-                        st.session_state.link_pago = link_pago
-                        st.session_state.paso_actual = 2
-                        st.rerun() # Recargamos para mostrar paso 2
+                    # Generar Link MP
+                    link = crear_preferencia_pago(nom, st.session_state.pedido_id)
+                    if link:
+                        st.session_state.link_pago = link
+                        st.session_state.step = 'pago'
+                        st.rerun()
 
-        # --- PASO 2: PAGAR Y VERIFICAR ---
-        elif st.session_state.paso_actual == 2:
-            st.markdown(f"### 💳 2. Realizar Pago de ${PRECIO_SELLO}")
-            st.info("Haz clic abajo para pagar en Mercado Pago. Al terminar, vuelve aquí y verifica.")
+        # PASO 3: PAGO -> VERIFICAR
+        elif st.session_state.step == 'pago':
+            st.success(f"¡Hola {st.session_state.cliente_nombre}! Estás a un paso.")
+            st.markdown(f"**Total a pagar: ${PRECIO_SELLO}**")
 
-            # Botón de Link (Abre en nueva pestaña)
-            st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago)
+            st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago, type="primary", use_container_width=True)
 
             st.write("")
-            st.write("---")
-            st.write("¿Ya realizaste el pago?")
+            st.caption("Una vez realizado el pago, presiona el botón de abajo:")
 
-            if st.button("🔄 VERIFICAR PAGO Y ENVIAR PEDIDO", type="primary"):
-                with st.spinner("Consultando a Mercado Pago..."):
-                    # Verificamos usando la Referencia Única
+            if st.button("🔄 VERIFICAR PAGO Y ENVIAR", use_container_width=True):
+                with st.spinner("Verificando con Mercado Pago..."):
                     pago_id = verificar_pago_mp(st.session_state.pedido_id)
 
                     if pago_id:
-                        st.success(f"✅ ¡Pago Aprobado! (ID: {pago_id})")
-                        st.info("Generando archivos y enviando email...")
+                        st.success("✅ ¡Pago Confirmado!")
 
-                        # Generar y Enviar
                         pdf_bytes, f_name = generar_pdf_hibrido(datos, st.session_state.cliente_nombre, incluir_guias_hd=mostrar_guias)
-                        ok = enviar_email(pdf_bytes, f_name, st.session_state.cliente_nombre, st.session_state.cliente_email, pago_id)
+                        ok = enviar_email(pdf_bytes, f_name, st.session_state.cliente_nombre, st.session_state.cliente_wpp, pago_id)
 
                         if ok:
                             st.balloons()
-                            st.success("📩 ¡Pedido enviado correctamente!")
-                            # Reiniciar proceso (opcional)
-                            if st.button("Nuevo Pedido"):
-                                st.session_state.paso_actual = 1
+                            st.success("📩 ¡Pedido enviado a producción!")
+
+                            # Opción nuevo pedido
+                            if st.button("Hacer otro pedido"):
+                                st.session_state.step = 'diseño'
                                 st.session_state.pedido_id = str(uuid.uuid4())
                                 st.rerun()
                     else:
-                        st.error("❌ El pago aún no se encuentra aprobado. Espera unos segundos e intenta de nuevo.")
+                        st.error("❌ Pago no acreditado aún. Intenta en unos segundos.")
 
-            if st.button("⬅️ Volver a editar"):
-                st.session_state.paso_actual = 1
+            if st.button("⬅️ Volver atrás"):
+                st.session_state.step = 'datos'
                 st.rerun()
