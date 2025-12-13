@@ -83,7 +83,7 @@ st.markdown("""
 
     /* Botón CONFIRMAR DISEÑO (Negro) */
     div[data-testid="stForm"] button {
-        background-color: #000000;
+        background-color: #FFC107;
         color: white;
         border: none;
     }
