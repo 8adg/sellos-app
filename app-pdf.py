@@ -11,15 +11,15 @@ from email import encoders
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Queselló! - Editor",
-    page_icon="assets/logo.svg",
+    page_title="Queselló! - Editor", 
+    page_icon="assets/logo.svg", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 14, "offset": -1.0},      
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},      
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0}, 
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}  
 ]
@@ -27,7 +27,7 @@ EJEMPLO_INICIAL = [
 # --- 🎨 ESTILOS CSS ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #222; }
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff;
         border: 1px solid #ddd;
@@ -40,8 +40,8 @@ st.markdown("""
     }
     .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
         color: #212529 !important;
-        background-color: #ffffff !important;
-        border-color: #ced4da;
+        background-color: #DADADA !important;
+        border-color: #666;
     }
     [data-baseweb="select"] svg { fill: #212529 !important; }
     div[data-testid="stForm"] button {
@@ -63,7 +63,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HEADER ---
-c_logo, c_title = st.columns([0.15, 0.85])
+c_logo, c_title = st.columns([0.15, 1.95])
 with c_logo:
     if os.path.exists("assets/logo.svg"): st.image("assets/logo.svg", width=80)
     elif os.path.exists("assets/logo.png"): st.image("assets/logo.png", width=80)
@@ -114,6 +114,7 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
     draw = ImageDraw.Draw(img)
     draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=4 if color_borde=="red" else 1)
     
+    # Calcular altura total para centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
@@ -138,68 +139,67 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2
+        x_pos = (w_px - text_w) / 2 
         
-        # Posición Y: Base + Offset
-        # IMPORTANTE: Pillow dibuja desde la esquina superior del texto (Ascender)
+        # En Pillow: Y es la parte SUPERIOR de la letra
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
         
         y_cursor_base += sz_px
     return img
 
 def generar_pdf_final(datos_lineas, cliente):
-    # PDF Horizontal (36x15)
+    # PDF Config
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page()
     pdf.set_margins(0,0,0)
-    pdf.set_auto_page_break(False, 0)
+    pdf.set_auto_page_break(False, margin=0) # CRÍTICO: Desactivar salto de página automático
     
     # Cargar fuentes
-    # Usamos un diccionario inverso para asegurar que el nombre de familia sea seguro
-    font_families = {}
+    font_map = {} # Mapeo de Ruta -> NombreFamilia
+    font_counter = 1
     
-    for nombre_humano, ruta in FUENTES_DISPONIBLES.items():
-        if os.path.exists(ruta): 
-            # Creamos un nombre de familia seguro (sin espacios, minúsculas)
-            safe_family = ''.join(e for e in nombre_humano if e.isalnum()).lower()
-            try: 
-                pdf.add_font(safe_family, "", ruta)
-                font_families[ruta] = safe_family
+    for ruta in FUENTES_DISPONIBLES.values():
+        if ruta != "Arial" and os.path.exists(ruta):
+            # Usamos un nombre simple e interno para evitar líos con espacios
+            family_name = f"CustomFont{font_counter}"
+            try:
+                pdf.add_font(family_name, "", ruta)
+                font_map[ruta] = family_name
+                font_counter += 1
             except: pass
 
-    # Cálculo Altura Total
+    # Calcular posición Y inicial (Centrado)
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
     
-    # Dibujar líneas
     for l in datos_lineas:
-        h_linea_mm = l['size'] * FACTOR_PT_A_MM
-        
-        # Seleccionar familia
-        ruta_actual = l['fuente']
-        if ruta_actual in font_families:
-            fam = font_families[ruta_actual]
-        else:
-            fam = "Arial" # Fallback
-            
+        # Configurar fuente
+        ruta = l['fuente']
+        fam = font_map.get(ruta, "Arial")
         pdf.set_font(fam, size=l['size'])
         
-        # CALCULO PRECISO DE Y
-        # Posición base + Offset manual
-        # FPDF Cell dibuja desde la esquina superior izquierda de la celda
-        y_final = y_base + l['offset_y']
+        # Calcular posición Y del texto
+        # En FPDF 'text()', la coordenada Y es la LÍNEA BASE.
+        # En Pillow, la coordenada Y es la PARTE SUPERIOR.
+        # Factor de corrección: ~0.78 del tamaño de la fuente suele ser la altura desde top a baseline.
+        correction_baseline = (l['size'] * FACTOR_PT_A_MM) * 0.78
         
-        pdf.set_xy(0, y_final)
+        # Posición Y final = Base + Offset Manual + Corrección Baseline
+        y_final = y_base + l['offset_y'] + correction_baseline
         
-        try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
-        except: txt = l['texto']
+        # Centrado Horizontal Manual
+        # Calculamos ancho del texto
+        txt_width = pdf.get_string_width(l['texto'])
+        x_centered = (ANCHO_REAL_MM - txt_width) / 2
         
-        # Usamos Cell para centrar horizontalmente (align='C')
-        # h=h_linea_mm asegura que la celda tenga la altura exacta de la línea
-        pdf.cell(w=ANCHO_REAL_MM, h=h_linea_mm, text=txt, border=0, align='C')
+        try: txt_safe = l['texto'].encode('latin-1', 'replace').decode('latin-1')
+        except: txt_safe = l['texto']
         
-        # Avanzar cursor base para la próxima línea
-        y_base += h_linea_mm
+        # DIBUJO DIRECTO DE TEXTO (No usamos Cell para evitar saltos de página locos)
+        pdf.text(x_centered, y_final, txt_safe)
+        
+        # Avanzamos el cursor base por la altura de esta línea
+        y_base += (l['size'] * FACTOR_PT_A_MM)
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
@@ -254,33 +254,24 @@ with col_izq:
     datos = []
     
     for i in range(cant):
-        # Defaults
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
             def_sz = EJEMPLO_INICIAL[i]["size"]
             def_off = EJEMPLO_INICIAL[i].get("offset", 0.0)
         else:
-            def_txt = ""
-            def_idx = 0
-            def_sz = 9
-            def_off = 0.0
+            def_txt = ""; def_idx = 0; def_sz = 9; def_off = 0.0
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1:
-                t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", label_visibility="collapsed")
-            with c2:
-                f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
-            with c3:
-                slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
-            with c4:
-                offset = st.number_input(f"o{i}", -10.0, 10.0, value=def_off, step=0.5, key=f"oi{i}", label_visibility="collapsed")
+            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed")
+            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
+            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
+            with c4: offset = st.number_input(f"o{i}", -10.0, 10.0, value=def_off, step=0.5, key=f"oi{i}", label_visibility="collapsed")
             
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
-            
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
@@ -304,7 +295,7 @@ with col_der:
     img_preview = generar_preview_imagen(datos, "black")
     st.image(img_preview, use_container_width=True)
     
-    st.caption("Usa **Pos. Y** para subir (-) o bajar (+) cada línea.")
+    st.caption("Usa **Pos. Y** para ajustar la altura manualmente.")
     st.write("---")
     
     st.markdown("### ✅ Finalizar Pedido")
