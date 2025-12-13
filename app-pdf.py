@@ -170,7 +170,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             # --- AJUSTE DE TAMAÑO DE COTA ---
             # Hacemos la fuente mucho más pequeña relativa a la imagen
             # Antes: scale/2.5 -> Ahora: scale/6
-            tamano_fuente_guia = int(8 * scale / 3)
+            tamano_fuente_guia = int(8 * scale / 9)
 
             try: ascent, descent = font.getmetrics()
             except: ascent = sz_px * 0.8
