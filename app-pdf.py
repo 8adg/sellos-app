@@ -88,7 +88,7 @@ st.markdown("""
         border: none;
     }
     div[data-testid="stForm"] button:hover {
-        background-color: #fff;
+        background-color: #888;
         color: white;
     }
 
