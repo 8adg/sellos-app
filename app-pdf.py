@@ -55,44 +55,56 @@ EJEMPLO_INICIAL = [
 ]
 
 # --- ESTILOS CSS ---
+# --- 🎨 ESTILOS CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
+
+    /* Card Styling */
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
         border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.04);
-        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        padding: 15px;
+        margin-bottom: 10px;
     }
-    label, p, h1, h2, h3, div { color: #333333 !important; }
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
+
+    /* Textos oscuros */
+    label, p, h1, h2, h3, div, span { color: #333333 !important; }
+
+    /* Inputs */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
         color: #212529 !important;
         background-color: #ffffff !important;
         border: 1px solid #ced4da;
     }
+
+    /* Iconos de las flechas select */
     [data-baseweb="select"] svg { fill: #212529 !important; }
 
-    /* Botones Personalizados */
+    /* Estilo para los Iconos de Tamaño/Posición */
+    .icon-label {
+        font-size: 1.2rem;
+        font-weight: bold;
+        text-align: center;
+        padding-top: 15px; /* Ajuste para alinear con el slider */
+        color: #555;
+    }
+
+    /* Botones */
     .stButton button {
-        width: 100%;
         border-radius: 8px;
         font-weight: bold;
-        transition: all 0.3s ease;
+        width: 100%;
+        transition: all 0.2s;
     }
-
-    /* Botón CONFIRMAR DISEÑO (Negro) */
     div[data-testid="stForm"] button {
-        background-color: #FFC107;
-        color: white;
+        background-color: #28a745 !important;
+        color: white !important;
         border: none;
     }
-    div[data-testid="stForm"] button:hover {
-        background-color: #888;
-        color: white;
-    }
 
-    /* Ocultar menú default */
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -296,21 +308,18 @@ col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 inputs_disabled = st.session_state.step != 'diseño'
 
 # --- COLUMNA IZQUIERDA: DISEÑO ---
+# --- COLUMNA IZQUIERDA ---
 with col_izq:
     st.subheader("🛠️ Configuración")
 
-    with st.container(border=True):
-        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
-    st.write("")
-
-    c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
-    c_h1.markdown("**Texto**")
-    c_h2.markdown("**Fuente**")
-    c_h3.markdown("**Tamaño**")
-    c_h4.markdown("**Pos. Y**")
+    # Selector de cantidad (fuera de las cards)
+    cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
+    st.write("") # Espacio
 
     datos = []
+
     for i in range(cant):
+        # Lógica de defaults
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
@@ -319,23 +328,41 @@ with col_izq:
         else:
             def_txt = ""; def_idx = 0; def_sz = 9; def_off = 0.0
 
+        # INICIO CARD
         with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
-            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
-            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
-            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
+            # FILA 1: Texto (Ancho) y Fuente (Angosto)
+            c_top1, c_top2 = st.columns([0.65, 0.35])
+            with c_top1:
+                t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c_top2:
+                f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+
+            # FILA 2: Icono Sz | Slider Sz | Icono Pos | Slider Pos
+            # Usamos columnas ajustadas para que el slider sea más corto
+            c_icon1, c_slid1, c_icon2, c_slid2 = st.columns([0.1, 0.4, 0.1, 0.4])
+
+            with c_icon1:
+                st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
+            with c_slid1:
+                slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+
+            with c_icon2:
+                st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
+            with c_slid2:
+                offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+
+            # Validación Ancho (Lógica interna)
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
-                st.warning(f"Ajustado a {size_final}pt")
+                # Aviso sutil
+                st.caption(f"⚠️ Texto ajustado a {size_final}pt")
 
             datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset})
-
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
