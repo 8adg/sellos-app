@@ -8,6 +8,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
+import uuid
+import mercadopago # LIBRERÍA NUEVA
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -16,6 +18,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# --- CONFIGURACIÓN COMERCIAL ---
+PRECIO_SELLO = 20500 # Precio en ARS
+MP_ACCESS_TOKEN = st.secrets["mercadopago"]["access_token"]
+
+# Inicializar SDK de Mercado Pago
+mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 
 # --- 1. CONFIGURACIÓN ---
 FUENTES_DISPONIBLES = {
@@ -33,19 +42,19 @@ FUENTES_DISPONIBLES = {
     "Arial (Sistema)": "Arial"
 }
 
-# --- DATOS DE EJEMPLO ---
-EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
-    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
-]
-
 # --- CONSTANTES ---
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
 SCALE_PREVIEW = 20
 SCALE_HD = 80
+
+# --- DATOS DE EJEMPLO ---
+EJEMPLO_INICIAL = [
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
+    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
+    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
+]
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -65,20 +74,28 @@ st.markdown("""
         border: 1px solid #ced4da;
     }
     [data-baseweb="select"] svg { fill: #212529 !important; }
+
+    /* Botón Pagar (Azul Mercado Pago) */
+    .btn-pagar {
+        background-color: #009EE3 !important;
+        color: white !important;
+        border: none;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+        text-decoration: none;
+        display: block;
+        font-weight: bold;
+    }
+    .btn-pagar:hover { background-color: #007bbd !important; }
+
+    /* Botón Verificar (Verde) */
     div[data-testid="stForm"] button {
         background-color: #28a745;
         color: white !important;
         font-weight: bold;
-        border: none;
-        border-radius: 6px;
-        padding: 10px;
-        transition: all 0.3s ease;
     }
-    div[data-testid="stForm"] button:hover {
-        background-color: #218838;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
-    }
+
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -90,7 +107,7 @@ with c_logo:
     elif os.path.exists("assets/logo.png"): st.image("assets/logo.png", width=90)
 with c_title:
     st.title("Editor de Sellos Automáticos")
-    st.markdown("Diseña tu **Queselló!** en tiempo real. Área de impresión: **36x15 mm**.")
+    st.markdown(f"Diseña tu **Queselló!**. Precio: **${PRECIO_SELLO}**")
 st.write("---")
 
 # --- HELPERS ---
@@ -118,11 +135,10 @@ def get_font_metrics_mm(ruta_fuente, size_pt):
     except:
         return (size_pt * FACTOR_PT_A_MM) * 0.78
 
-# --- MOTOR GRÁFICO (COTAS AJUSTADAS) ---
+# --- MOTOR GRÁFICO ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
-
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
 
@@ -155,49 +171,28 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2
+        y_visual_px = y_cursor_base + offset_px
+        draw.text((x_pos, y_visual_px), txt, font=font, fill="black")
 
-        # Posición Y final
-        y_final_px = y_cursor_base + offset_px
-
-        # Dibujar Texto
-        draw.text((x_pos, y_final_px), txt, font=font, fill="black")
-
-        # --- GUÍAS TÉCNICAS (FINAS) ---
         if mostrar_guias:
             color_guia = (0, 150, 255)
-            grosor_guia = max(1, int(scale / 20)) # Mucho más fino
-
-            # --- AJUSTE DE TAMAÑO DE COTA ---
-            # Hacemos la fuente mucho más pequeña relativa a la imagen
-            # Antes: scale/2.5 -> Ahora: scale/6
-            tamano_fuente_guia = int(8 * scale / 9)
-
+            grosor_guia = max(1, int(scale / 20))
+            tamano_fuente_cota = int(8 * scale / 6)
             try: ascent, descent = font.getmetrics()
             except: ascent = sz_px * 0.8
-
-            y_base_guia = y_final_px + ascent
-
-            # 1. Línea Base
+            y_base_guia = y_visual_px + ascent
             draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
-
-            # 2. Cota (Pequeña y a la izquierda)
-            try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_guia)
+            try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
             except: font_small = ImageFont.load_default()
-
             pos_mm_real = y_base_guia / scale
             label = f"L{i+1}:{pos_mm_real:.1f}"
-
-            # Dibujar cota a la izquierda (X=2px) para no molestar
-            draw.text((scale * 0.5, y_base_guia - tamano_fuente_guia), label, font=font_small, fill=color_guia)
-
-            # 3. Caja delimitadora (Gris muy suave)
-            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(220,220,220), width=0)
+            draw.text((scale * 0.5, y_base_guia - tamano_fuente_cota), label, font=font_small, fill=color_guia)
+            draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(220,220,220), width=1)
 
         y_cursor_base += sz_px
-
     return img
 
-# --- GENERADOR PDF HÍBRIDO ---
+# --- GENERADOR PDF ---
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
@@ -228,7 +223,7 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         pdf.text(x_centered, y_final_baseline, txt)
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
-    # PÁG 2: IMAGEN HD
+    # PÁG 2: Imagen HD
     pdf.add_page()
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
@@ -239,16 +234,22 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
-# --- EMAIL ---
-def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
+def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente, id_pago):
     try:
         remitente = st.secrets["email"]["usuario"]
         password = st.secrets["email"]["password"]
         destinatario = st.secrets["email"]["destinatario"]
 
         msg = MIMEMultipart()
-        msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido Quesello: {cliente}"
-        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\nAdjunto PDF Híbrido."
+        msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
+        cuerpo = f"""
+        NUEVO PEDIDO CONFIRMADO
+        -----------------------
+        Cliente: {cliente}
+        Email: {email_cliente}
+        ID Pago MP: {id_pago}
+        Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        """
         msg.attach(MIMEText(cuerpo, 'plain'))
         part = MIMEBase('application', "octet-stream")
         part.set_payload(pdf_bytes)
@@ -262,14 +263,68 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
         return True
     except Exception as e: st.error(f"Error Email: {e}"); return False
 
+# --- LÓGICA MERCADO PAGO ---
+def crear_preferencia_pago(nombre_cliente, ref_id):
+    preference_data = {
+        "items": [
+            {
+                "title": f"Sello Personalizado - {nombre_cliente}",
+                "quantity": 1,
+                "unit_price": PRECIO_SELLO,
+                "currency_id": "ARS"
+            }
+        ],
+        "external_reference": ref_id,
+        "back_urls": {
+            "success": "https://www.google.com", # Redirección simple (el usuario vuelve a la app)
+            "failure": "https://www.google.com",
+            "pending": "https://www.google.com"
+        },
+        "auto_return": "approved"
+    }
+    try:
+        preference_response = mp_sdk.preference().create(preference_data)
+        return preference_response["response"]["init_point"]
+    except Exception as e:
+        st.error(f"Error creando pago: {e}")
+        return None
+
+def verificar_pago_mp(ref_id):
+    """Busca si existe un pago aprobado con esa referencia"""
+    filters = {
+        "external_reference": ref_id,
+        "status": "approved"
+    }
+    try:
+        # Buscamos en la API de Mercado Pago
+        search_result = mp_sdk.payment().search(filters)
+        if search_result["response"]["results"]:
+            # Devolvemos el ID del pago real
+            return search_result["response"]["results"][0]["id"]
+        return None
+    except Exception as e:
+        # En caso de error de conexión, devolvemos None
+        return None
+
+# --- ESTADO DE SESIÓN (Persistencia del pedido) ---
+if 'pedido_id' not in st.session_state:
+    st.session_state.pedido_id = str(uuid.uuid4()) # ID único para esta sesión
+
+if 'paso_actual' not in st.session_state:
+    st.session_state.paso_actual = 1 # 1: Diseño, 2: Pago
+
 # --- INTERFAZ ---
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 
 # --- COLUMNA IZQUIERDA ---
 with col_izq:
     st.subheader("🛠️ Configuración")
+
+    # Bloquear edición si ya estamos pagando
+    disabled = st.session_state.paso_actual == 2
+
     with st.container(border=True):
-        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2)
+        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=disabled)
     st.write("")
 
     c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
@@ -290,10 +345,10 @@ with col_izq:
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed")
-            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed")
-            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed")
-            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed")
+            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", label_visibility="collapsed", disabled=disabled)
+            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=disabled)
+            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=disabled)
+            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=disabled)
 
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
@@ -317,7 +372,7 @@ with col_der:
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
-        mostrar_guias = st.checkbox("📏 Mostrar Guías Técnicas (Imprimibles)", value=False)
+        mostrar_guias = st.checkbox("📏 Mostrar Guías", value=False, disabled=disabled)
 
     if not es_valido_vertical:
         st.error("⛔ EXCESO DE ALTURA")
@@ -328,24 +383,68 @@ with col_der:
     img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
     st.image(img_preview, use_container_width=True)
 
-    st.caption("Usa **Pos. Y** para mover verticalmente.")
     st.write("---")
 
     if es_valido_vertical:
-        st.markdown("### ✅ Finalizar Pedido")
-        with st.form("form_pedido", border=True):
-            st.write("Datos de contacto:")
-            c_nom, c_mail = st.columns(2)
-            with c_nom: nom = st.text_input("Nombre")
-            with c_mail: mail = st.text_input("Email")
-            submitted = st.form_submit_button("💾 CONFIRMAR PEDIDO")
+        # --- PASO 1: DATOS Y GENERAR LINK ---
+        if st.session_state.paso_actual == 1:
+            st.markdown("### ✅ 1. Confirmar Diseño")
+            with st.form("form_inicio_pago", border=True):
+                nom = st.text_input("Nombre Cliente")
+                mail = st.text_input("Email Cliente")
+                # Guardamos esto en session state para usarlo luego
+                generar = st.form_submit_button("💳 IR A PAGAR")
 
-        if submitted:
-            if not nom: st.toast("Falta nombre", icon="⚠️")
-            else:
-                with st.spinner("Procesando..."):
-                    pdf_bytes, f_name = generar_pdf_hibrido(datos, nom, incluir_guias_hd=mostrar_guias)
-                    enviado = enviar_email(pdf_bytes, f_name, nom, mail)
-                    if enviado:
-                        st.balloons()
-                        st.success(f"¡Pedido de {nom} enviado!")
+            if generar:
+                if not nom: st.toast("Falta nombre", icon="⚠️")
+                else:
+                    # Guardamos datos
+                    st.session_state.cliente_nombre = nom
+                    st.session_state.cliente_email = mail
+
+                    # Generamos Link
+                    link_pago = crear_preferencia_pago(nom, st.session_state.pedido_id)
+                    if link_pago:
+                        st.session_state.link_pago = link_pago
+                        st.session_state.paso_actual = 2
+                        st.rerun() # Recargamos para mostrar paso 2
+
+        # --- PASO 2: PAGAR Y VERIFICAR ---
+        elif st.session_state.paso_actual == 2:
+            st.markdown(f"### 💳 2. Realizar Pago de ${PRECIO_SELLO}")
+            st.info("Haz clic abajo para pagar en Mercado Pago. Al terminar, vuelve aquí y verifica.")
+
+            # Botón de Link (Abre en nueva pestaña)
+            st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago)
+
+            st.write("")
+            st.write("---")
+            st.write("¿Ya realizaste el pago?")
+
+            if st.button("🔄 VERIFICAR PAGO Y ENVIAR PEDIDO", type="primary"):
+                with st.spinner("Consultando a Mercado Pago..."):
+                    # Verificamos usando la Referencia Única
+                    pago_id = verificar_pago_mp(st.session_state.pedido_id)
+
+                    if pago_id:
+                        st.success(f"✅ ¡Pago Aprobado! (ID: {pago_id})")
+                        st.info("Generando archivos y enviando email...")
+
+                        # Generar y Enviar
+                        pdf_bytes, f_name = generar_pdf_hibrido(datos, st.session_state.cliente_nombre, incluir_guias_hd=mostrar_guias)
+                        ok = enviar_email(pdf_bytes, f_name, st.session_state.cliente_nombre, st.session_state.cliente_email, pago_id)
+
+                        if ok:
+                            st.balloons()
+                            st.success("📩 ¡Pedido enviado correctamente!")
+                            # Reiniciar proceso (opcional)
+                            if st.button("Nuevo Pedido"):
+                                st.session_state.paso_actual = 1
+                                st.session_state.pedido_id = str(uuid.uuid4())
+                                st.rerun()
+                    else:
+                        st.error("❌ El pago aún no se encuentra aprobado. Espera unos segundos e intenta de nuevo.")
+
+            if st.button("⬅️ Volver a editar"):
+                st.session_state.paso_actual = 1
+                st.rerun()
