@@ -423,7 +423,7 @@ st.markdown(f"""
     <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">Vista Previa</div>
     <img src="data:image/png;base64,{img_b64}" />
     <div style="font-size: 0.8rem; margin-top: 5px; color: {'red' if not es_valido_vertical else 'green'}">
-        {altura_total_usada_mm:.1f}mm / 15mm
+        {altura_total_usada_mm:.1f}mm / 36mm
     </div>
 </div>
 """, unsafe_allow_html=True)
