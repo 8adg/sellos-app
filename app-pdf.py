@@ -456,7 +456,7 @@ with col_der:
                 with c_nom: nom = st.text_input("Nombre Completo")
                 with c_wpp: wpp = st.text_input("WhatsApp")
                 ir_pago = st.form_submit_button("💳 IR A PAGAR")
-            if st.button("⬅️ Editar"): st.session_state.step = 'diseño'; st.rerun()
+            if st.button("⬅️ Continuar Editando"): st.session_state.step = 'diseño'; st.rerun()
             if ir_pago:
                 if not nom or not wpp: st.toast("Faltan datos", icon="⚠️")
                 else:
