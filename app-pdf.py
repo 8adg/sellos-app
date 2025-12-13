@@ -59,7 +59,7 @@ EJEMPLO_INICIAL = [
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
 ]
 
-# --- 🎨 ESTILOS CSS (RESPONSIVE PRO) ---
+# --- 🎨 ESTILOS CSS (RESPONSIVE PRO + BOTONES STEPPER) ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
@@ -92,31 +92,40 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
         text-align: center;
-        padding-top: 15px; /* Ajuste para alinear con el input */
+        padding-top: 15px;
         color: #555;
     }
 
-    /* Botones */
-    .stButton button {
-        border-radius: 8px;
-        font-weight: bold;
-        width: 100%;
-        transition: all 0.2s;
+    /* --- CLASE ESPECIAL PARA BOTONES DE MOVIMIENTO (STEPPER) --- */
+    /* Apuntamos a los botones pequeños dentro de las columnas de configuración */
+    div[data-testid="column"] button.kind-secondary {
+        background-color: #e9ecef !important;
+        color: #333 !important;
+        border: 1px solid #ced4da !important;
+        font-size: 1.2rem !important;
+        padding: 0px 5px !important;
+        line-height: 1 !important;
+        height: 42px; /* Misma altura que los inputs */
     }
+    div[data-testid="column"] button.kind-secondary:hover {
+        background-color: #ced4da !important;
+        border-color: #adb5bd !important;
+    }
+
+    /* Botón CONFIRMAR (Verde) - Usamos selector específico para no pisar los grises */
     div[data-testid="stForm"] button {
         background-color: #28a745 !important;
         color: white !important;
+        font-weight: bold;
         border: none;
     }
 
     /* --- MOBILE ONLY CSS --- */
     @media (max-width: 768px) {
-        /* 1. Contenedor Sticky para la imagen en el tope */
         .mobile-sticky-header {
             position: fixed;
-            top: 50px; /* Ajustado para que no tape el menú */
-            left: 0;
-            right: 0;
+            top: 50px;
+            left: 0; right: 0;
             z-index: 9999;
             background-color: #ffffff;
             padding: 10px;
@@ -124,30 +133,15 @@ st.markdown("""
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             text-align: center;
         }
-
         .mobile-sticky-header img {
-            max-width: 90%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            max-width: 90%; height: auto;
+            border: 1px solid #ddd; border-radius: 4px;
         }
-
-        /* Espacio para compensar el header sticky */
-        .block-container {
-            padding-top: 220px !important;
-        }
-
-        /* 2. Ocultar la columna derecha original en mobile */
-        .desktop-only-col {
-            display: none;
-        }
+        .block-container { padding-top: 220px !important; }
+        .desktop-only-col { display: none; }
     }
-
-    /* --- DESKTOP ONLY CSS --- */
     @media (min-width: 769px) {
-        .mobile-sticky-header {
-            display: none;
-        }
+        .mobile-sticky-header { display: none; }
     }
 
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
@@ -198,6 +192,14 @@ def get_font_metrics_mm(ruta_fuente, size_pt):
     except:
         return (size_pt * FACTOR_PT_A_MM) * 0.78
 
+# --- CALLBACKS PARA POSICION Y ---
+# Funciones para manejar el click de los botones de posición
+def mover_arriba(key):
+    st.session_state[key] = max(-10.0, st.session_state[key] - 0.5)
+
+def mover_abajo(key):
+    st.session_state[key] = min(10.0, st.session_state[key] + 0.5)
+
 # --- MOTOR GRÁFICO ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
@@ -246,11 +248,8 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             except: ascent = sz_px * 0.8
             y_base_guia = y_visual_px + ascent
             draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
-
-            # Cota
             try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
             except: font_small = ImageFont.load_default()
-
             draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(220,220,220), width=1)
 
         y_cursor_base += sz_px
@@ -259,8 +258,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 # --- GENERADOR PDF ---
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
-
-    # PÁG 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -280,21 +277,17 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         except: txt = l['texto']
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
-
         ascent_mm = get_font_metrics_mm(ruta, l['size'])
         y_final_baseline = y_base + l['offset_y'] + ascent_mm
-
         pdf.text(x_centered, y_final_baseline, txt)
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
-    # PÁG 2: Imagen HD
     pdf.add_page()
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
     img_hd.save(temp_path, quality=100, subsampling=0)
     pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
     if os.path.exists(temp_path): os.remove(temp_path)
-
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
@@ -304,7 +297,6 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, wpp_cliente, id_pago):
         remitente = st.secrets["email"]["usuario"]
         password = st.secrets["email"]["password"]
         destinatario = st.secrets["email"]["destinatario"]
-
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
         cuerpo = f"""
@@ -356,55 +348,66 @@ if 'pedido_id' not in st.session_state: st.session_state.pedido_id = str(uuid.uu
 if 'step' not in st.session_state: st.session_state.step = 'diseño'
 
 # --- INTERFAZ PRINCIPAL ---
-
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
-
-# BLOQUEO DE EDICIÓN
 inputs_disabled = st.session_state.step != 'diseño'
 
 # --- COLUMNA IZQUIERDA: CONFIGURACIÓN ---
 with col_izq:
     st.subheader("🛠️ Configuración")
 
-    # Selector de cantidad (fuera de las cards)
     cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
     st.write("")
 
     datos = []
 
     for i in range(cant):
-        # Lógica de defaults
+        # 1. Recuperar valor inicial del ejemplo o crear estado en 0.0 si no existe
+        # Esto es vital para que los botones sepan qué valor modificar
+        key_offset = f"offset_state_{i}"
+
+        # Si es la primera vez que corre, inicializamos el estado con el default del ejemplo
+        if key_offset not in st.session_state:
+            val_default = 0.0
+            if i < len(EJEMPLO_INICIAL):
+                val_default = float(EJEMPLO_INICIAL[i].get("offset", 0.0))
+            st.session_state[key_offset] = val_default
+
+        # Defaults para textos (solo visual inicial)
+        def_txt = ""; def_idx = 0; def_sz = 9
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
             def_sz = EJEMPLO_INICIAL[i]["size"]
-            def_off = EJEMPLO_INICIAL[i].get("offset", 0.0)
-        else:
-            def_txt = ""; def_idx = 0; def_sz = 9; def_off = 0.0
 
         # INICIO CARD
         with st.container(border=True):
 
-            # FILA 1: Texto (Ancho) y Fuente (Angosto)
+            # FILA 1: Texto y Fuente
             c_top1, c_top2 = st.columns([0.65, 0.35])
             with c_top1:
                 t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
             with c_top2:
                 f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            # FILA 2: Icono Sz | Stepper Sz | Icono Pos | Stepper Pos
-            # Usamos columnas ajustadas
-            c_icon1, c_slid1, c_icon2, c_slid2 = st.columns([0.1, 0.4, 0.1, 0.4])
+            # FILA 2: Icono Sz | Stepper Sz | Icono Pos | Botones Pos
+            c_icon1, c_slid1, c_icon2, c_btn1, c_btn2 = st.columns([0.1, 0.35, 0.1, 0.2, 0.2])
 
             with c_icon1: st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
             with c_slid1:
-                # CAMBIO A STEPPER (Number Input)
-                slider_val = st.number_input(f"s{i}", min_value=6, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+                # LÍMITE MÍNIMO: 8pt
+                slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
             with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
-            with c_slid2:
-                # CAMBIO A STEPPER (Number Input)
-                offset = st.number_input(f"o{i}", min_value=-10.0, max_value=10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+
+            # --- BOTONES CUSTOM PARA POSICIÓN (ARRIBA/ABAJO) ---
+            # Usamos 'args' para pasarle la llave correcta a la función
+            with c_btn1:
+                st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, help="Subir")
+            with c_btn2:
+                st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, help="Bajar")
+
+            # Leemos el valor actual del estado (que los botones modificaron)
+            offset_actual = st.session_state[key_offset]
 
             # Validación Ancho
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
@@ -413,9 +416,11 @@ with col_izq:
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
+                # OJO: Si el ajuste baja de 8pt, avisamos
+                if size_final < 8: size_final = 8 # Force min 8 safety
                 st.caption(f"⚠️ Ajustado a {size_final}pt")
 
-            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset})
+            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset_actual})
 
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
