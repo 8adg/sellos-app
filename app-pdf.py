@@ -19,7 +19,7 @@ st.set_page_config(
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.0},      
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},      
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0}, 
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}  
 ]
@@ -92,7 +92,8 @@ FUENTES_DISPONIBLES = {
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
-SCALE = 20 
+SCALE_PREVIEW = 20  # Para ver en pantalla
+SCALE_HIGH_RES = 60 # Para la imagen del PDF (Muy alta calidad)
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
@@ -106,22 +107,24 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- GENERADORES ---
-def generar_preview_imagen(datos_lineas, color_borde="black"):
-    """
-    Genera una imagen raster para mostrar en pantalla (Preview).
-    Usa coordenadas Top-Left.
-    """
-    w_px = int(ANCHO_REAL_MM * SCALE)
-    h_px = int(ALTO_REAL_MM * SCALE)
+# --- MOTOR DE RENDERIZADO UNIFICADO (PILLOW) ---
+def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black"):
+    w_px = int(ANCHO_REAL_MM * scale)
+    h_px = int(ALTO_REAL_MM * scale)
+    
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
-    draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=4 if color_borde=="red" else 1)
+    
+    if dibujar_borde:
+        grosor = 4 if color_borde == "red" else 2
+        # Ajustamos grosor según escala para que no se vea fino en HD
+        if scale > 20: grosor *= 2
+        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor)
     
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
-        size_px = size_pt * FACTOR_PT_A_MM * SCALE
+        size_px = size_pt * FACTOR_PT_A_MM * scale
         total_h_px += size_px
 
     y_cursor_base = (h_px - total_h_px) / 2
@@ -132,8 +135,8 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         sz_pt = linea['size']
         offset_mm = linea['offset_y']
         
-        sz_px = int(sz_pt * FACTOR_PT_A_MM * SCALE)
-        offset_px = int(offset_mm * SCALE)
+        sz_px = int(sz_pt * FACTOR_PT_A_MM * scale)
+        offset_px = int(offset_mm * scale)
         
         try:
             if f_path == "Arial": raise Exception
@@ -144,36 +147,34 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2 
         
-        # Pillow dibuja texto desde arriba (Top)
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
-        
         y_cursor_base += sz_px
+        
     return img
 
-def generar_pdf_final(datos_lineas, cliente):
-    """
-    Genera un PDF VECTORIAL REAL.
-    Ajusta la coordenada Y para convertir de Top (Pantalla) a Baseline (PDF).
-    """
+# --- GENERADOR DE PDF HÍBRIDO (2 PÁGINAS) ---
+def generar_pdf_hibrido(datos_lineas, cliente):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
+    
+    # ---------------------------------------------------------
+    # PÁGINA 1: VECTORIAL (Editable)
+    # ---------------------------------------------------------
     pdf.add_page()
     pdf.set_margins(0,0,0)
     pdf.set_auto_page_break(False, margin=0) 
     
-    # Cargar fuentes con nombres seguros
     font_map = {} 
     font_counter = 1
     
     for ruta in FUENTES_DISPONIBLES.values():
         if ruta != "Arial" and os.path.exists(ruta):
-            family_name = f"CustomFont{font_counter}"
+            family_name = f"Font{font_counter}"
             try:
                 pdf.add_font(family_name, "", ruta)
                 font_map[ruta] = family_name
                 font_counter += 1
             except: pass
 
-    # Calcular posición Y inicial (Centrado)
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
     
@@ -185,25 +186,34 @@ def generar_pdf_final(datos_lineas, cliente):
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
         
-        # Centrado Horizontal Manual
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
         
-        # --- CORRECCIÓN DE COORDENADAS (EL SECRETO) ---
-        altura_linea_mm = l['size'] * FACTOR_PT_A_MM
+        altura_linea = l['size'] * FACTOR_PT_A_MM
+        # Corrección visual para intentar igualar (aunque no sea perfecto)
+        correction_baseline = altura_linea * 0.78
+        y_final = y_base + l['offset_y'] + correction_baseline
         
-        # FPDF escribe sobre la línea base. Pillow escribe desde el techo.
-        # La distancia del techo a la línea base es aprox el 78% del tamaño total.
-        factor_bajada = altura_linea_mm * 0.78
-        
-        # Posición Y = (Cursor donde empieza el bloque) + (Ajuste manual del usuario) + (Bajada a línea base)
-        y_final_baseline = y_base + l['offset_y'] + factor_bajada
-        
-        # Escribimos VECTORIALMENTE
-        pdf.text(x_centered, y_final_baseline, txt)
-        
-        # Avanzamos el cursor "techo" para la siguiente línea
-        y_base += altura_linea_mm
+        pdf.text(x_centered, y_final, txt)
+        y_base += altura_linea
+
+    # ---------------------------------------------------------
+    # PÁGINA 2: IMAGEN HD (Referencia Visual Exacta)
+    # ---------------------------------------------------------
+    pdf.add_page()
+    
+    # Generar imagen HD (Scale 60 = ~600 DPI) sin borde para que sea limpia
+    img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HIGH_RES, dibujar_borde=False)
+    
+    # Guardar temporal
+    temp_path = f"temp_hd_{datetime.now().strftime('%f')}.jpg"
+    img_hd.save(temp_path, quality=100, subsampling=0)
+    
+    # Insertar ocupando toda la página
+    pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
+    
+    # Borrar temporal
+    if os.path.exists(temp_path): os.remove(temp_path)
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
@@ -218,7 +228,15 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
         msg['From'] = remitente
         msg['To'] = destinatario
         msg['Subject'] = f"Pedido Quesello: {cliente}"
-        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nFecha: {datetime.now()}"
+        cuerpo = f"""
+        Nuevo pedido recibido.
+        Cliente: {cliente}
+        Email: {email_cliente}
+        
+        ADJUNTO PDF CON 2 PÁGINAS:
+        Pág 1: Vectores (Editable)
+        Pág 2: Imagen HD (Referencia visual exacta)
+        """
         msg.attach(MIMEText(cuerpo, 'plain'))
 
         part = MIMEBase('application', "octet-stream")
@@ -296,10 +314,11 @@ with col_der:
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
 
-    img_preview = generar_preview_imagen(datos, "black")
+    # Preview en pantalla (Scale 20)
+    img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, dibujar_borde=True, color_borde="black")
     st.image(img_preview, use_container_width=True)
     
-    st.caption("Usa **Pos. Y** para ajustar la altura manualmente.")
+    st.caption("Usa **Pos. Y** para ajustar altura.")
     st.write("---")
     
     st.markdown("### ✅ Finalizar Pedido")
@@ -314,7 +333,7 @@ with col_der:
         if not nom: st.toast("Falta nombre", icon="⚠️")
         else:
             with st.spinner("Procesando..."):
-                pdf_bytes, f_name = generar_pdf_final(datos, nom)
+                pdf_bytes, f_name = generar_pdf_hibrido(datos, nom)
                 enviado = enviar_email(pdf_bytes, f_name, nom, mail)
                 if enviado:
                     st.balloons()
