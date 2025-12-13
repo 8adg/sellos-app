@@ -78,7 +78,7 @@ st.markdown("""
     label, p, h1, h2, h3, div, span { color: #333333 !important; }
 
     /* Inputs */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div {
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
         color: #212529 !important;
         background-color: #ffffff !important;
         border: 1px solid #ced4da;
@@ -92,7 +92,7 @@ st.markdown("""
         font-size: 1.2rem;
         font-weight: bold;
         text-align: center;
-        padding-top: 15px;
+        padding-top: 15px; /* Ajuste para alinear con el input */
         color: #555;
     }
 
@@ -114,16 +114,15 @@ st.markdown("""
         /* 1. Contenedor Sticky para la imagen en el tope */
         .mobile-sticky-header {
             position: fixed;
-            top: 120px;
+            top: 50px; /* Ajustado para que no tape el menú */
+            left: 0;
+            right: 0;
             z-index: 9999;
             background-color: #ffffff;
             padding: 10px;
             border-bottom: 2px solid #28a745;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             text-align: center;
-            margin-left: -1rem;
-            margin-right: -1rem;
-            margin-top: -4rem; /* Subir para tapar header default si molesta */
         }
 
         .mobile-sticky-header img {
@@ -133,14 +132,14 @@ st.markdown("""
             border-radius: 4px;
         }
 
-        /* 2. Ocultar la columna derecha original en mobile (para no duplicar imagen) */
-        .desktop-only-col {
-            display: none;
+        /* Espacio para compensar el header sticky */
+        .block-container {
+            padding-top: 220px !important;
         }
 
-        /* Ajuste de padding para inputs */
-        .block-container {
-            padding-top: 0rem;
+        /* 2. Ocultar la columna derecha original en mobile */
+        .desktop-only-col {
+            display: none;
         }
     }
 
@@ -162,7 +161,6 @@ def pil_to_base64(img):
     return base64.b64encode(buffered.getvalue()).decode()
 
 # --- HEADER ---
-# Usamos un contenedor vacío aquí que llenaremos al final con la imagen sticky para mobile
 mobile_preview_placeholder = st.empty()
 
 c_logo, c_title = st.columns([0.15, 0.85])
@@ -252,7 +250,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             # Cota
             try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
             except: font_small = ImageFont.load_default()
-            # No dibujamos texto en preview mobile pequeña para no ensuciar
 
             draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(220,220,220), width=1)
 
@@ -369,12 +366,14 @@ inputs_disabled = st.session_state.step != 'diseño'
 with col_izq:
     st.subheader("🛠️ Configuración")
 
+    # Selector de cantidad (fuera de las cards)
     cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
     st.write("")
 
     datos = []
 
     for i in range(cant):
+        # Lógica de defaults
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
@@ -385,6 +384,7 @@ with col_izq:
 
         # INICIO CARD
         with st.container(border=True):
+
             # FILA 1: Texto (Ancho) y Fuente (Angosto)
             c_top1, c_top2 = st.columns([0.65, 0.35])
             with c_top1:
@@ -392,14 +392,19 @@ with col_izq:
             with c_top2:
                 f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            # FILA 2: Icono Sz | Slider Sz | Icono Pos | Slider Pos
+            # FILA 2: Icono Sz | Stepper Sz | Icono Pos | Stepper Pos
+            # Usamos columnas ajustadas
             c_icon1, c_slid1, c_icon2, c_slid2 = st.columns([0.1, 0.4, 0.1, 0.4])
 
             with c_icon1: st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
-            with c_slid1: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c_slid1:
+                # CAMBIO A STEPPER (Number Input)
+                slider_val = st.number_input(f"s{i}", min_value=6, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
             with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
-            with c_slid2: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c_slid2:
+                # CAMBIO A STEPPER (Number Input)
+                offset = st.number_input(f"o{i}", min_value=-10.0, max_value=10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
             # Validación Ancho
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
@@ -422,10 +427,7 @@ if not es_valido_vertical:
 else:
     color_borde = "black"
 
-# Generamos la imagen con Pillow
 img_pil = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=False)
-
-# Convertimos a HTML Base64 para el Sticky Header en Mobile
 img_b64 = pil_to_base64(img_pil)
 
 # --- INYECTAR HEADER STICKY (SOLO MOBILE VIA CSS) ---
@@ -442,7 +444,6 @@ st.markdown(f"""
 
 # --- COLUMNA DERECHA (DESKTOP) ---
 with col_der:
-    # Usamos clase desktop-only-col para ocultar esto en mobile via CSS y no duplicar
     st.markdown('<div class="desktop-only-col">', unsafe_allow_html=True)
 
     st.subheader("👁️ Vista Previa")
@@ -454,10 +455,9 @@ with col_der:
 
     if not es_valido_vertical: st.error("⛔ EXCESO DE ALTURA")
 
-    # Imagen Desktop
     st.image(renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias), use_container_width=True)
 
-    st.markdown('</div>', unsafe_allow_html=True) # Fin desktop only
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("---")
 
