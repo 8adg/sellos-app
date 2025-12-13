@@ -114,7 +114,7 @@ st.markdown("""
         /* 1. Contenedor Sticky para la imagen en el tope */
         .mobile-sticky-header {
             position: fixed;
-            top: 98px;
+            top: 120px;
             z-index: 9999;
             background-color: #ffffff;
             padding: 10px;
