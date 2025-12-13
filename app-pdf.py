@@ -104,9 +104,9 @@ st.markdown("""
         font-weight: bold;
         border: none;
     }
-
+.mobile-sticky-header {display:none!important }
     /* --- MOBILE OPTIMIZATION --- */
-    @media (max-width: 368px) {
+    @media (max-width: 768px) {
 
         /* 1. Header Sticky */
         .mobile-sticky-header {
