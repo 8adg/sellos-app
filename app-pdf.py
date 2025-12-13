@@ -104,7 +104,7 @@ st.markdown("""
         font-weight: bold;
         border: none;
     }
-.mobile-sticky-header {display:none!important }
+.mobile-sticky-header {display:none;}
     /* --- MOBILE OPTIMIZATION --- */
     @media (max-width: 768px) {
 
@@ -119,6 +119,7 @@ st.markdown("""
             border-bottom: 2px solid #28a745;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             text-align: center;
+            display:flex;
         }
         .mobile-sticky-header img {
             max-width: 90%; height: auto;
