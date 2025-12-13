@@ -50,7 +50,7 @@ SCALE_HD = 80
 # --- ESTILOS CSS ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #fafafa; }
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
