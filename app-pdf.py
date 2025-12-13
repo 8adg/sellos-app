@@ -11,8 +11,8 @@ from email import encoders
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Queselló! - Editor", 
-    page_icon="assets/logo.svg", 
+    page_title="Queselló! - Editor",
+    page_icon="assets/logo.svg",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -139,9 +139,10 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2 
+        x_pos = (w_px - text_w) / 2
         
-        # En Pillow: Y es la parte SUPERIOR de la letra
+        # Posición Y: Base + Offset
+        # Pillow dibuja desde Top-Left
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
         
         y_cursor_base += sz_px
@@ -152,15 +153,15 @@ def generar_pdf_final(datos_lineas, cliente):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page()
     pdf.set_margins(0,0,0)
-    pdf.set_auto_page_break(False, margin=0) # CRÍTICO: Desactivar salto de página automático
+    # IMPORTANTE: Desactivar salto de página automático para que el offset no rompa nada
+    pdf.set_auto_page_break(False, margin=0) 
     
     # Cargar fuentes
-    font_map = {} # Mapeo de Ruta -> NombreFamilia
+    font_map = {} 
     font_counter = 1
     
     for ruta in FUENTES_DISPONIBLES.values():
         if ruta != "Arial" and os.path.exists(ruta):
-            # Usamos un nombre simple e interno para evitar líos con espacios
             family_name = f"CustomFont{font_counter}"
             try:
                 pdf.add_font(family_name, "", ruta)
@@ -173,33 +174,28 @@ def generar_pdf_final(datos_lineas, cliente):
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
     
     for l in datos_lineas:
-        # Configurar fuente
         ruta = l['fuente']
         fam = font_map.get(ruta, "Arial")
         pdf.set_font(fam, size=l['size'])
         
-        # Calcular posición Y del texto
-        # En FPDF 'text()', la coordenada Y es la LÍNEA BASE.
-        # En Pillow, la coordenada Y es la PARTE SUPERIOR.
-        # Factor de corrección: ~0.78 del tamaño de la fuente suele ser la altura desde top a baseline.
-        correction_baseline = (l['size'] * FACTOR_PT_A_MM) * 0.78
+        # Posición Base + Offset Manual
+        y_final = y_base + l['offset_y']
         
-        # Posición Y final = Base + Offset Manual + Corrección Baseline
-        y_final = y_base + l['offset_y'] + correction_baseline
+        # Movemos el cursor de FPDF explícitamente
+        pdf.set_xy(0, y_final)
         
-        # Centrado Horizontal Manual
-        # Calculamos ancho del texto
-        txt_width = pdf.get_string_width(l['texto'])
-        x_centered = (ANCHO_REAL_MM - txt_width) / 2
+        try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
+        except: txt = l['texto']
         
-        try: txt_safe = l['texto'].encode('latin-1', 'replace').decode('latin-1')
-        except: txt_safe = l['texto']
+        # Altura de la línea
+        h_linea_mm = l['size'] * FACTOR_PT_A_MM
         
-        # DIBUJO DIRECTO DE TEXTO (No usamos Cell para evitar saltos de página locos)
-        pdf.text(x_centered, y_final, txt_safe)
+        # Usamos CELL porque dibuja desde el TOP (igual que Pillow)
+        # Esto debería sincronizar la vista previa con el PDF
+        pdf.cell(w=ANCHO_REAL_MM, h=h_linea_mm, text=txt, border=0, align='C')
         
-        # Avanzamos el cursor base por la altura de esta línea
-        y_base += (l['size'] * FACTOR_PT_A_MM)
+        # Avanzamos el cursor base
+        y_base += h_linea_mm
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
@@ -295,7 +291,7 @@ with col_der:
     img_preview = generar_preview_imagen(datos, "black")
     st.image(img_preview, use_container_width=True)
     
-    st.caption("Usa **Pos. Y** para ajustar la altura manualmente.")
+    st.caption("Usa **Pos. Y** para subir (-) o bajar (+) cada línea.")
     st.write("---")
     
     st.markdown("### ✅ Finalizar Pedido")
