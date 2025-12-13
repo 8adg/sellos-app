@@ -54,7 +54,7 @@ EJEMPLO_INICIAL = [
 # --- 3. ESTILOS CSS (UI TUNEADA) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #fafafa; }
 
     /* Contenedores tipo Card */
     [data-testid="stVerticalBlockBorderWrapper"] {
