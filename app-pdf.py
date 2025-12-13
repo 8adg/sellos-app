@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # --- CONFIGURACIÓN COMERCIAL ---
-PRECIO_SELLO = 5500
+PRECIO_SELLO = 20500
 try:
     MP_ACCESS_TOKEN = st.secrets["mercadopago"]["access_token"]
     mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
@@ -411,7 +411,7 @@ with col_config:
         # Usamos contenedor para métricas
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
-        col_m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
+        col_m2.metric("Sello", f"{ANCHO_REAL_MM} mm", delta_color="normal")
 
         # Checkbox Guías (Solo visible en Desktop o si se quiere)
         mostrar_guias = st.checkbox("📏 Guías Técnicas", value=False, disabled=disabled)
