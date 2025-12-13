@@ -347,7 +347,7 @@ with col_der:
     with st.container(border=True):
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
-        m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
+        m2.metric("Sello", f"{ANCHO_REAL_MM} mm", delta_color="normal")
         mostrar_guias = st.checkbox("📏 Guías Técnicas", value=False, disabled=inputs_disabled)
 
     if not es_valido_vertical:
