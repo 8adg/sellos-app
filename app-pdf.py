@@ -449,7 +449,7 @@ with col_der:
                 st.session_state.step = 'datos'; st.rerun()
 
         elif st.session_state.step == 'datos':
-            st.info("🔒 Diseño bloqueado.")
+            st.info("🔒 Diseño preparado. Completa tus datos y pagá para finalizar")
             with st.form("form_datos"):
                 st.write("Tus Datos:")
                 c_nom, c_wpp = st.columns(2)
