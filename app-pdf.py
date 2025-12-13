@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
+import tempfile
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -92,7 +93,6 @@ FUENTES_DISPONIBLES = {
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
-SCALE = 20 
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
@@ -106,19 +106,27 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- GENERADORES ---
-def generar_preview_imagen(datos_lineas, color_borde="black"):
-    w_px = int(ANCHO_REAL_MM * SCALE)
-    h_px = int(ALTO_REAL_MM * SCALE)
+# --- MOTOR GRÁFICO UNIFICADO (PILLOW) ---
+def renderizar_imagen_sello(datos_lineas, scale_factor=20, dibujar_borde=True, color_borde="black"):
+    """
+    Genera la imagen del sello. 
+    Usamos esta MISMA función para la preview (baja res) y para el PDF (alta res).
+    """
+    w_px = int(ANCHO_REAL_MM * scale_factor)
+    h_px = int(ALTO_REAL_MM * scale_factor)
+    
+    # Fondo blanco (CMYK friendly si fuera necesario, pero RGB ok para esto)
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
-    draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=4 if color_borde=="red" else 1)
+    
+    if dibujar_borde:
+        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=int(scale_factor/5))
     
     # Calcular altura total para centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
-        size_px = size_pt * FACTOR_PT_A_MM * SCALE
+        size_px = size_pt * FACTOR_PT_A_MM * scale_factor
         total_h_px += size_px
 
     y_cursor_base = (h_px - total_h_px) / 2
@@ -129,8 +137,8 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         sz_pt = linea['size']
         offset_mm = linea['offset_y']
         
-        sz_px = int(sz_pt * FACTOR_PT_A_MM * SCALE)
-        offset_px = int(offset_mm * SCALE)
+        sz_px = int(sz_pt * FACTOR_PT_A_MM * scale_factor)
+        offset_px = int(offset_mm * scale_factor)
         
         try:
             if f_path == "Arial": raise Exception
@@ -139,66 +147,37 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2 
+        x_pos = (w_px - text_w) / 2
         
-        # En Preview: (x, y) es Top-Left
+        # Dibujamos en: Posición Base + Offset Manual
+        # Pillow dibuja desde Top-Left
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
         
         y_cursor_base += sz_px
+    
     return img
 
 def generar_pdf_final(datos_lineas, cliente):
-    # PDF Config
+    # 1. Generamos la imagen a MUY ALTA resolución (Escala 40 = ~1000 DPI)
+    # Sin borde para impresión
+    img_alta_res = renderizar_imagen_sello(datos_lineas, scale_factor=40, dibujar_borde=False)
+    
+    # 2. Guardamos la imagen en un archivo temporal
+    temp_img_path = f"temp_{datetime.now().strftime('%H%M%S%f')}.jpg"
+    img_alta_res.save(temp_img_path, quality=100, subsampling=0)
+    
+    # 3. Creamos el PDF y pegamos la imagen ocupando todo el espacio
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
     pdf.add_page()
     pdf.set_margins(0,0,0)
-    pdf.set_auto_page_break(False, margin=0) 
+    pdf.set_auto_page_break(False, margin=0)
     
-    # Cargar fuentes
-    font_map = {} 
-    font_counter = 1
+    # Pegar imagen en (0,0) con el ancho y alto total del sello
+    pdf.image(temp_img_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
     
-    for ruta in FUENTES_DISPONIBLES.values():
-        if ruta != "Arial" and os.path.exists(ruta):
-            family_name = f"CustomFont{font_counter}"
-            try:
-                pdf.add_font(family_name, "", ruta)
-                font_map[ruta] = family_name
-                font_counter += 1
-            except: pass
-
-    # Calcular posición Y inicial (Centrado)
-    h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
-    y_base = (ALTO_REAL_MM - h_total_mm) / 2
-    
-    for l in datos_lineas:
-        ruta = l['fuente']
-        fam = font_map.get(ruta, "Arial")
-        pdf.set_font(fam, size=l['size'])
-        
-        try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
-        except: txt = l['texto']
-        
-        # Centrado Horizontal
-        txt_width = pdf.get_string_width(txt)
-        x_centered = (ANCHO_REAL_MM - txt_width) / 2
-        
-        # --- CORRECCIÓN VERTICAL CRÍTICA ---
-        # 1. Calculamos la altura de esta línea en mm
-        altura_linea = l['size'] * FACTOR_PT_A_MM
-        
-        # 2. Factor de corrección "Techo a Base"
-        # Esto baja el cursor ~78% de la altura de la letra para simular el comportamiento de Pillow.
-        correction_baseline = altura_linea * 0.78
-        
-        # 3. Posición Final = Cursor Base + Offset Manual + Corrección Baseline
-        y_final = y_base + l['offset_y'] + correction_baseline
-        
-        # Dibujamos texto (no cell) en la posición calculada
-        pdf.text(x_centered, y_final, txt)
-        
-        # Avanzamos el cursor base para la próxima línea (sin offset, flujo natural)
-        y_base += altura_linea
+    # Limpieza
+    try: os.remove(temp_img_path)
+    except: pass
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
@@ -291,7 +270,8 @@ with col_der:
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
 
-    img_preview = generar_preview_imagen(datos, "black")
+    # PREVIEW (Escala 20, con borde)
+    img_preview = renderizar_imagen_sello(datos, scale_factor=20, dibujar_borde=True, color_borde="black")
     st.image(img_preview, use_container_width=True)
     
     st.caption("Usa **Pos. Y** para subir (-) o bajar (+) cada línea.")
