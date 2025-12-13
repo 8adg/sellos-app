@@ -10,6 +10,8 @@ from email.mime.text import MIMEText
 from email import encoders
 import uuid
 import mercadopago
+import base64
+import io
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -20,12 +22,12 @@ st.set_page_config(
 )
 
 # --- CONFIGURACIÓN COMERCIAL ---
-PRECIO_SELLO = 20500
+PRECIO_SELLO = 5500
 try:
     MP_ACCESS_TOKEN = st.secrets["mercadopago"]["access_token"]
     mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
 except:
-    MP_ACCESS_TOKEN = None # Fallback por si no hay secrets
+    MP_ACCESS_TOKEN = None
 
 # --- 1. CONFIGURACIÓN ---
 FUENTES_DISPONIBLES = {
@@ -43,7 +45,6 @@ FUENTES_DISPONIBLES = {
     "Arial (Sistema)": "Arial"
 }
 
-# --- CONSTANTES ---
 FACTOR_PT_A_MM = 0.3527
 ANCHO_REAL_MM = 36
 ALTO_REAL_MM = 15
@@ -57,12 +58,12 @@ EJEMPLO_INICIAL = [
     {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
 ]
 
-# --- 🎨 ESTILOS CSS (RESPONSIVE) ---
+# --- 🎨 ESTILOS CSS (ROBUSTO) ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
 
-    /* Card Styling */
+    /* Cards */
     [data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #ffffff;
         border: 1px solid #e0e0e0;
@@ -71,8 +72,10 @@ st.markdown("""
         padding: 15px;
     }
 
-    /* Textos y Inputs */
+    /* Textos oscuros */
     label, p, h1, h2, h3, div, span { color: #333333 !important; }
+
+    /* Inputs */
     .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stNumberInput input {
         color: #212529 !important;
         background-color: #ffffff !important;
@@ -80,64 +83,76 @@ st.markdown("""
     }
     [data-baseweb="select"] svg { fill: #212529 !important; }
 
-    /* Botón Genérico */
-    .stButton button {
-        border-radius: 8px;
-        font-weight: bold;
-        width: 100%;
-        transition: all 0.2s;
-    }
-
-    /* Ocultar elementos default */
+    /* Ocultar menú */
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 
-    /* --- ESTILOS MOBILE ESPECÍFICOS --- */
+    /* --- MOBILE STICKY PREVIEW (CSS Puro) --- */
+    /* Creamos una clase para el contenedor de la imagen */
+    .sticky-preview-container {
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background-color: #fafafa;
+        padding: 10px 0;
+        border-bottom: 1px solid #ddd;
+        text-align: center;
+        width: 100%;
+    }
+
+    .sticky-preview-container img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    /* --- MOBILE FLOATING BUTTON --- */
+    /* Esto afectará al contenedor donde pongamos los botones de acción */
     @media (max-width: 768px) {
-
-        /* 1. STICKY PREVIEW (Imagen fija arriba) */
-        /* Buscamos el contenedor de la columna de preview */
-        [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stImage"] {
-            position: sticky;
-            top: 0;
-            z-index: 999;
-            background-color: #fafafa;
-            padding-top: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        /* 2. OCULTAR ENCABEZADOS DE TABLA EN MOBILE */
-        .desktop-header {
-            display: none;
-        }
-
-        /* 3. BOTÓN FLOTANTE ABAJO (Fixed Bottom) */
-        .floating-bottom {
+        .floating-action-container {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
             background-color: white;
             padding: 15px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
             z-index: 1000;
-            text-align: center;
+            border-top: 1px solid #eee;
         }
 
-        /* Añadir padding al final para que el contenido no quede tapado por el botón */
-        .block-container {
-            padding-bottom: 100px;
+        /* Ajuste para que el botón ocupe todo el ancho en mobile */
+        .floating-action-container button {
+            width: 100% !important;
+            margin: 0 !important;
         }
+
+        /* Espacio al final de la página para que el botón no tape contenido */
+        .block-container {
+            padding-bottom: 120px !important;
+        }
+
+        /* Ocultar encabezados de tabla en mobile */
+        .desktop-header { display: none; }
     }
 
-    /* Estilo del botón Confirmar (Verde) */
-    .btn-confirmar button {
+    /* Estilo Botón Verde Principal */
+    .stButton button[kind="primary"] {
         background-color: #28a745 !important;
         color: white !important;
         border: none;
-        font-size: 1.1rem;
-        padding: 0.8rem;
+        font-weight: bold;
+        font-size: 16px;
     }
+
+    /* Estilo Botón Azul Mercado Pago */
+    .stLinkButton a {
+        background-color: #009EE3 !important;
+        color: white !important;
+        font-weight: bold;
+        text-align: center;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -151,6 +166,12 @@ with c_title:
     if PRECIO_SELLO > 0:
         st.markdown(f"Diseña tu **Queselló!**. Precio: **${PRECIO_SELLO}**")
 st.write("---")
+
+# --- UTILS IMAGEN HTML ---
+def pil_to_base64(img):
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
 
 # --- HELPERS ---
 def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
@@ -201,7 +222,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         f_path = linea['fuente']
         sz_pt = linea['size']
         offset_mm = linea['offset_y']
-
         sz_px = int(sz_pt * FACTOR_PT_A_MM * scale)
         offset_px = int(offset_mm * scale)
 
@@ -238,8 +258,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 # --- GENERADOR PDF ---
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
-
-    # PÁG 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -266,7 +284,6 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         pdf.text(x_centered, y_final_baseline, txt)
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
-    # PÁG 2: Imagen HD
     pdf.add_page()
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
@@ -285,7 +302,7 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente, id_pago):
         destinatario = st.secrets["email"]["destinatario"]
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
-        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nID MP: {id_pago}\nFecha: {datetime.now()}"
+        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nID MP: {id_pago}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         msg.attach(MIMEText(cuerpo, 'plain'))
         part = MIMEBase('application', "octet-stream")
         part.set_payload(pdf_bytes)
@@ -314,7 +331,7 @@ def crear_preferencia_pago(nombre_cliente, ref_id):
     except Exception as e: st.error(f"Error MP: {e}"); return None
 
 def verificar_pago_mp(ref_id):
-    if not MP_ACCESS_TOKEN: return "SIMULADO_123" # Bypass si no hay token
+    if not MP_ACCESS_TOKEN: return "SIMULADO_123"
     filters = {"external_reference": ref_id, "status": "approved"}
     try:
         res = mp_sdk.payment().search(filters)
@@ -322,128 +339,138 @@ def verificar_pago_mp(ref_id):
         return None
     except: return None
 
-# --- ESTADO DE SESIÓN ---
+# --- ESTADO ---
 if 'pedido_id' not in st.session_state: st.session_state.pedido_id = str(uuid.uuid4())
 if 'step' not in st.session_state: st.session_state.step = 'diseño'
 
 # ==============================================================================
-# --- LAYOUT PRINCIPAL (LAYOUT INVERTIDO PARA MOBILE) ---
+# --- LAYOUT MOBILE-FIRST INVERTIDO ---
 # ==============================================================================
 
-# Definimos columnas:
-# col_preview va PRIMERO para que en Mobile quede arriba.
-# En Desktop será la columna izquierda (o derecha si queremos mantener orden visual clásico,
-# pero Streamlit en mobile renderiza Col1 -> Col2).
-#
-# PEDIDO: Desktop -> Config (Der) | Preview (Izq). Mobile -> Preview (Top) | Config (Bot)
-# Esto en Streamlit nativo es: Col 1 = Preview, Col 2 = Config.
-col_preview, col_espacio, col_config = st.columns([1, 0.1, 1])
+# Calculamos datos PRIMERO para renderizar la preview ARRIBA en el código
+# -----------------------------------------------------------------------
 
-# BLOQUEO
-disabled = st.session_state.step != 'diseño'
+# Placeholder de datos (Los necesitamos para el cálculo vertical antes de mostrar la UI)
+cant_temp = 3 # Default para evitar error antes de renderizar
+datos_temp = EJEMPLO_INICIAL # Default
 
-# --- COLUMNA 1: PREVIEW (IZQ en código, PRIMERA en Mobile) ---
-with col_preview:
-    st.subheader("👁️ Vista Previa")
+# Recuperar datos si ya existen en el widget state
+if "cant_lineas" in st.session_state:
+    cant_temp = st.session_state.cant_lineas
 
-    # Placeholder para calcular altura (Necesitamos 'datos' que se generan en la otra columna)
-    # TRUCO: Como Streamlit corre de arriba a abajo, no podemos dibujar la imagen aquí
-    # con los datos que se generan más abajo en 'col_config'.
-    # SOLUCIÓN: Usamos un contenedor vacío ('placeholder') y lo llenamos al final del script.
-    preview_placeholder = st.empty()
-    metrics_placeholder = st.empty()
+# Construir datos actuales basados en el estado de los widgets (si existen)
+datos_actuales = []
+altura_total = 0
+es_valido_vertical = True
+color_borde = "black"
+
+# Leemos los widgets dinámicos para construir la imagen ANTES de pintar la columna derecha
+# Esto es un truco para poder mostrar la imagen "sticky" arriba
+for i in range(cant_temp):
+    # Valores default del ejemplo
+    def_t = ""; def_idx = 0; def_sz = 9; def_off = 0.0
+    if i < len(EJEMPLO_INICIAL):
+        def_t = EJEMPLO_INICIAL[i]["texto"]
+        def_idx = EJEMPLO_INICIAL[i]["font_idx"]
+        def_sz = EJEMPLO_INICIAL[i]["size"]
+        def_off = EJEMPLO_INICIAL[i].get("offset", 0.0)
+
+    # Intentar leer del estado, si no usar default
+    txt = st.session_state.get(f"t{i}", def_t)
+    f_key_idx = st.session_state.get(f"f{i}", list(FUENTES_DISPONIBLES.keys())[def_idx]) # Esto devuelve el string key
+    if isinstance(f_key_idx, int): f_key = list(FUENTES_DISPONIBLES.keys())[f_key_idx] # Fix si viene por index
+    else: f_key = f_key_idx
+
+    sz = st.session_state.get(f"si{i}", def_sz)
+    off = st.session_state.get(f"oi{i}", def_off)
+
+    ruta = FUENTES_DISPONIBLES[f_key]
+    datos_actuales.append({"texto": txt, "fuente": ruta, "size": sz, "offset_y": off})
+
+# Validar Altura
+altura_total = sum([d['size'] * FACTOR_PT_A_MM for d in datos_actuales])
+es_valido_vertical = (ALTO_REAL_MM - altura_total) >= -1.0
+if not es_valido_vertical: color_borde = "red"
+
+# Generar Imagen Base64 para HTML Sticky
+img_pil = renderizar_imagen(datos_actuales, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=False)
+img_b64 = pil_to_base64(img_pil)
 
 
-# --- COLUMNA 2: CONFIGURACIÓN (DER en código, SEGUNDA en Mobile) ---
-with col_config:
-    st.subheader("🛠️ Configuración")
+# --- RENDERIZADO VISUAL ---
+
+# 1. PREVIEW STICKY (HTML INYECTADO AL PRINCIPIO)
+st.markdown(f"""
+<div class="sticky-preview-container">
+    <div style="font-weight: bold; margin-bottom: 5px; color: #333;">Vista Previa (36x15mm)</div>
+    <img src="data:image/png;base64,{img_b64}" />
+    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">
+        Altura usada: {altura_total:.1f}mm {'🔴' if not es_valido_vertical else '🟢'}
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# 2. COLUMNAS DE CONFIGURACIÓN
+col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
+
+# COLUMNA CONFIG (Ahora es la única columna "activa" de controles)
+with col_izq:
+    st.write("") # Espacio post preview
+
+    disabled = st.session_state.step != 'diseño'
 
     with st.container(border=True):
-        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=disabled)
-    st.write("")
+        cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, key="cant_lineas", disabled=disabled)
 
-    # ENCABEZADOS DE TABLA (CLASE DESKTOP-ONLY)
-    # Usamos HTML para aplicar la clase que lo oculta en mobile
+    # Encabezados Desktop
     st.markdown('<div class="desktop-header">', unsafe_allow_html=True)
-    c_h1, c_h2, c_h3, c_h4 = st.columns([3, 2, 1.5, 1.5])
-    c_h1.markdown("**Texto**")
-    c_h2.markdown("**Fuente**")
-    c_h3.markdown("**Tamaño**")
-    c_h4.markdown("**Pos. Y**")
+    c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
+    c1.markdown("**Texto**"); c2.markdown("**Fuente**"); c3.markdown("**Tamaño**"); c4.markdown("**Pos. Y**")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    datos = []
-
+    # Controles
     for i in range(cant):
+        # Defaults (mismo bloque que arriba para consistencia)
         if i < len(EJEMPLO_INICIAL):
-            def_txt = EJEMPLO_INICIAL[i]["texto"]
+            def_t = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
             def_sz = EJEMPLO_INICIAL[i]["size"]
             def_off = EJEMPLO_INICIAL[i].get("offset", 0.0)
         else:
-            def_txt = ""; def_idx = 0; def_sz = 9; def_off = 0.0
+            def_t = ""; def_idx = 0; def_sz = 9; def_off = 0.0
 
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([3, 2, 1.5, 1.5])
-            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=disabled)
-            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=disabled)
-            with c3: slider_val = st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=disabled)
-            with c4: offset = st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=disabled)
+            with c1: st.text_input(f"t{i}", value=def_t, key=f"t{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=disabled)
+            with c2: st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"f{i}", label_visibility="collapsed", disabled=disabled)
+            with c3: st.slider(f"s{i}", 6, 26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=disabled)
+            with c4: st.slider(f"o{i}", -10.0, 10.0, value=float(def_off), step=0.5, key=f"oi{i}", label_visibility="collapsed", disabled=disabled)
 
-            ruta_fuente = FUENTES_DISPONIBLES[f_key]
-            ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
-            size_final = slider_val
-            if ancho_actual_mm > ANCHO_REAL_MM:
-                size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
-                size_final = int(size_ajustado)
-                st.warning(f"Ajustado a {size_final}pt")
+            # Validación Ancho Individual
+            # Recalculamos aquí solo para mostrar warning específico
+            r_fuente = FUENTES_DISPONIBLES[st.session_state[f"f{i}"]]
+            w_mm = calcular_ancho_texto_mm(st.session_state[f"t{i}"], r_fuente, st.session_state[f"si{i}"])
+            if w_mm > ANCHO_REAL_MM:
+                st.warning("⚠️ Texto muy ancho")
 
-            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset})
-
-    # CALCULO VERTICAL
-    altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
-    es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
-
-    # ------------------------------------------------------------------
-    # AHORA QUE TENEMOS LOS DATOS, LLENAMOS EL PLACEHOLDER DE LA PREVIEW
-    # ------------------------------------------------------------------
-    with metrics_placeholder.container():
-        # Usamos contenedor para métricas
-        col_m1, col_m2 = st.columns(2)
-        col_m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
-        col_m2.metric("Sello", f"{ANCHO_REAL_MM} mm", delta_color="normal")
-
-        # Checkbox Guías (Solo visible en Desktop o si se quiere)
-        mostrar_guias = st.checkbox("📏 Guías Técnicas", value=False, disabled=disabled)
-
-    if not es_valido_vertical:
-        preview_placeholder.error("⛔ EXCESO DE ALTURA")
-        color_borde = "red"
-        img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
-        preview_placeholder.image(img_preview, use_container_width=True)
-    else:
-        color_borde = "black"
-        img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
-        # Mostramos la imagen en el placeholder de la columna izquierda (Top en mobile)
-        preview_placeholder.image(img_preview, use_container_width=True)
-
-    # ------------------------------------------------------------------
-    # SECCIÓN DE ACCIONES (FLOTANTE EN MOBILE)
-    # ------------------------------------------------------------------
-
+# COLUMNA ACCIONES (Derecha en Desktop / Abajo en Mobile)
+with col_der:
     st.write("---")
 
-    if es_valido_vertical:
-        # PASO 1: CONFIRMAR
+    if not es_valido_vertical:
+        st.error("⛔ El diseño excede el alto del sello. Reduce el tamaño.")
+    else:
+        # FLUJO DE PASOS (Botones Flotantes)
+
+        # PASO 1
         if st.session_state.step == 'diseño':
-            # Wrapper HTML para botón flotante
-            st.markdown('<div class="floating-bottom btn-confirmar">', unsafe_allow_html=True)
-            if st.button("✅ CONFIRMAR DISEÑO", use_container_width=True):
+            st.markdown('<div class="floating-action-container">', unsafe_allow_html=True)
+            if st.button("✅ CONFIRMAR DISEÑO", type="primary", use_container_width=True):
                 st.session_state.step = 'datos'
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # PASO 2: DATOS
+        # PASO 2
         elif st.session_state.step == 'datos':
             st.info("🔒 Diseño bloqueado.")
             with st.form("form_datos"):
@@ -451,9 +478,9 @@ with col_config:
                 nom = st.text_input("Nombre Completo")
                 wpp = st.text_input("WhatsApp")
 
-                # Wrapper para botón flotante dentro del form
-                st.markdown('<div class="floating-bottom btn-confirmar">', unsafe_allow_html=True)
-                ir_pago = st.form_submit_button("💳 IR A PAGAR")
+                # Container flotante para el botón submit
+                st.markdown('<div class="floating-action-container">', unsafe_allow_html=True)
+                ir_pago = st.form_submit_button("💳 IR A PAGAR", type="primary", use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
             if st.button("⬅️ Editar Diseño"):
@@ -461,7 +488,7 @@ with col_config:
                 st.rerun()
 
             if ir_pago:
-                if not nom or not wpp: st.toast("Completa nombre y WhatsApp", icon="⚠️")
+                if not nom or not wpp: st.toast("Completa todos los datos", icon="⚠️")
                 else:
                     st.session_state.cliente_nombre = nom
                     st.session_state.cliente_wpp = wpp
@@ -470,22 +497,21 @@ with col_config:
                         st.session_state.link_pago = link
                         st.session_state.step = 'pago'
                         st.rerun()
-                    else: st.error("Error conectando con MP (Falta Token)")
 
-        # PASO 3: PAGO
+        # PASO 3
         elif st.session_state.step == 'pago':
-            st.success(f"¡Hola {st.session_state.cliente_nombre}!")
-            st.markdown(f"**Total: ${PRECIO_SELLO}**")
+            st.success(f"Hola {st.session_state.cliente_nombre}!")
+            st.markdown(f"### Total: ${PRECIO_SELLO}")
 
             st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago, type="primary", use_container_width=True)
 
-            st.markdown('<div class="floating-bottom btn-confirmar">', unsafe_allow_html=True)
+            st.markdown('<div class="floating-action-container">', unsafe_allow_html=True)
             if st.button("🔄 YA PAGUÉ: ENVIAR PEDIDO", use_container_width=True):
                 with st.spinner("Verificando..."):
                     pago_id = verificar_pago_mp(st.session_state.pedido_id)
                     if pago_id:
                         st.success("✅ ¡Pago Confirmado!")
-                        pdf_bytes, f_name = generar_pdf_hibrido(datos, st.session_state.cliente_nombre, incluir_guias_hd=mostrar_guias)
+                        pdf_bytes, f_name = generar_pdf_hibrido(datos_actuales, st.session_state.cliente_nombre, incluir_guias_hd=True)
                         ok = enviar_email(pdf_bytes, f_name, st.session_state.cliente_nombre, st.session_state.cliente_wpp, pago_id)
                         if ok:
                             st.balloons()
