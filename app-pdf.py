@@ -139,10 +139,9 @@ def generar_preview_imagen(datos_lineas, color_borde="black"):
         
         bbox = draw.textbbox((0, 0), txt, font=font)
         text_w = bbox[2] - bbox[0]
-        x_pos = (w_px - text_w) / 2
+        x_pos = (w_px - text_w) / 2 
         
-        # Posición Y: Base + Offset
-        # Pillow dibuja desde Top-Left
+        # En Preview: (x, y) es Top-Left
         draw.text((x_pos, y_cursor_base + offset_px), txt, font=font, fill="black")
         
         y_cursor_base += sz_px
@@ -171,8 +170,7 @@ def generar_pdf_final(datos_lineas, cliente):
     # Calcular posición Y inicial (Centrado)
     h_total_mm = sum([l['size'] * FACTOR_PT_A_MM for l in datos_lineas])
     y_base = (ALTO_REAL_MM - h_total_mm) / 2
-    if y_base < 0: y_base = 0
-
+    
     for l in datos_lineas:
         ruta = l['fuente']
         fam = font_map.get(ruta, "Arial")
@@ -181,26 +179,25 @@ def generar_pdf_final(datos_lineas, cliente):
         try: txt = l['texto'].encode('latin-1', 'replace').decode('latin-1')
         except: txt = l['texto']
         
-        # --- CÁLCULO PRECISO PARA SINCRONIZAR CON PREVIEW ---
-        # 1. Calculamos el ancho para centrar manualmente
-        ancho_txt = pdf.get_string_width(txt)
-        x_centered = (ANCHO_REAL_MM - ancho_txt) / 2
+        # Centrado Horizontal
+        txt_width = pdf.get_string_width(txt)
+        x_centered = (ANCHO_REAL_MM - txt_width) / 2
         
-        # 2. Corrección de Línea Base
-        # Pillow dibuja en Y=Top. FPDF dibuja en Y=Baseline.
-        # Necesitamos bajar el cursor la altura del "Ascender" de la fuente.
-        # Factor aprox: 0.75 del tamaño total.
+        # --- CORRECCIÓN VERTICAL CRÍTICA ---
+        # 1. Calculamos la altura de esta línea en mm
         altura_linea = l['size'] * FACTOR_PT_A_MM
-        correccion_baseline = altura_linea * 0.75
         
-        # 3. Posición Final
-        # Y_Base (Cursor) + Offset Manual + Corrección Baseline
-        y_final = y_base + l['offset_y'] + correccion_baseline
+        # 2. Factor de corrección "Techo a Base"
+        # Esto baja el cursor ~78% de la altura de la letra para simular el comportamiento de Pillow.
+        correction_baseline = altura_linea * 0.78
         
-        # Usamos .text() que es coordenada absoluta, no .cell()
+        # 3. Posición Final = Cursor Base + Offset Manual + Corrección Baseline
+        y_final = y_base + l['offset_y'] + correction_baseline
+        
+        # Dibujamos texto (no cell) en la posición calculada
         pdf.text(x_centered, y_final, txt)
         
-        # Avanzamos el cursor base por la altura de la línea (sin contar offset)
+        # Avanzamos el cursor base para la próxima línea (sin offset, flujo natural)
         y_base += altura_linea
 
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
