@@ -106,7 +106,7 @@ st.markdown("""
     }
 
     /* --- MOBILE OPTIMIZATION --- */
-    @media (max-width: 768px) {
+    @media (max-width: 368px) {
 
         /* 1. Header Sticky */
         .mobile-sticky-header {
