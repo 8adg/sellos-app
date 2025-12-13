@@ -52,14 +52,14 @@ ALTO_REAL_MM = 15
 SCALE_PREVIEW = 20
 SCALE_HD = 80
 
-# --- DATOS DE EJEMPLO (CORREGIDOS A MIN 8pt) ---
+# --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
     {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 8, "offset": 0.0} # <-- Corregido de 7 a 8 para cumplir la regla
+    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
 ]
 
-# --- 🎨 ESTILOS CSS (RESPONSIVE PRO) ---
+# --- 🎨 ESTILOS CSS (FORCE MOBILE ROW) ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
@@ -70,8 +70,8 @@ st.markdown("""
         border: 1px solid #e0e0e0;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        padding: 15px;
-        margin-bottom: 10px;
+        padding: 12px;
+        margin-bottom: 8px;
     }
 
     /* Textos oscuros */
@@ -87,39 +87,35 @@ st.markdown("""
     /* Iconos de las flechas select */
     [data-baseweb="select"] svg { fill: #212529 !important; }
 
-    /* Estilo para los Iconos de Tamaño/Posición */
+    /* Estilo para los Iconos de Tamaño/Posición (AA / Flecha) */
     .icon-label {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         font-weight: bold;
         text-align: center;
-        padding-top: 15px;
+        padding-top: 12px;
         color: #555;
+        line-height: 1;
     }
 
-    /* Botones Stepper (Gris) */
-    div[data-testid="column"] button.kind-secondary {
-        background-color: #e9ecef !important;
-        color: #333 !important;
-        border: 1px solid #ced4da !important;
-    }
-
-    /* Botón CONFIRMAR (Verde) */
-    div[data-testid="stForm"] button {
+    /* Botones de Acción (Confirmar/Pagar) */
+    div[data-testid="stForm"] button, .stButton button[kind="primary"] {
         background-color: #28a745 !important;
         color: white !important;
         font-weight: bold;
         border: none;
     }
 
-    /* --- MOBILE ONLY CSS --- */
+    /* --- MOBILE OPTIMIZATION --- */
     @media (max-width: 768px) {
+
+        /* 1. Header Sticky */
         .mobile-sticky-header {
             position: fixed;
             top: 50px;
             left: 0; right: 0;
             z-index: 9999;
             background-color: #ffffff;
-            padding: 10px;
+            padding: 5px;
             border-bottom: 2px solid #28a745;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             text-align: center;
@@ -128,11 +124,41 @@ st.markdown("""
             max-width: 90%; height: auto;
             border: 1px solid #ddd; border-radius: 4px;
         }
-        .block-container { padding-top: 220px !important; }
+        .block-container { padding-top: 200px !important; }
         .desktop-only-col { display: none; }
+
+        /* 2. FORZAR COLUMNAS HORIZONTALES DENTRO DE LAS CARDS */
+        /* Esto evita que se apilen uno arriba del otro */
+        [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 5px !important; /* Espacio reducido entre elementos */
+        }
+
+        /* Ajustar anchos mínimos para que entren */
+        [data-testid="stVerticalBlockBorderWrapper"] [data-testid="column"] {
+            min-width: 0 !important;
+            width: auto !important;
+            flex: 1 !important;
+            padding: 0 !important;
+        }
+
+        /* Forzar iconos a ocupar poco espacio */
+        .icon-column {
+            flex: 0 0 25px !important; /* Ancho fijo icono */
+        }
     }
-    @media (min-width: 769px) {
-        .mobile-sticky-header { display: none; }
+
+    /* Botones de Stepper (Flechas Arriba/Abajo) */
+    div[data-testid="column"] button:not([kind="primary"]) {
+        background-color: #f0f2f6 !important;
+        border: 1px solid #ced4da !important;
+        color: #333 !important;
+        padding: 0px !important;
+        height: 42px; /* Misma altura que el input */
+        line-height: 1;
+        font-size: 1.2rem;
     }
 
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
@@ -183,7 +209,7 @@ def get_font_metrics_mm(ruta_fuente, size_pt):
     except:
         return (size_pt * FACTOR_PT_A_MM) * 0.78
 
-# --- CALLBACKS POS Y ---
+# --- CALLBACKS ---
 def mover_arriba(key):
     st.session_state[key] = max(-10.0, st.session_state[key] - 0.5)
 def mover_abajo(key):
@@ -213,7 +239,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         f_path = linea['fuente']
         sz_pt = linea['size']
         offset_mm = linea['offset_y']
-
         sz_px = int(sz_pt * FACTOR_PT_A_MM * scale)
         offset_px = int(offset_mm * scale)
 
@@ -237,18 +262,16 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             except: ascent = sz_px * 0.8
             y_base_guia = y_visual_px + ascent
             draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
-            try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
-            except: font_small = ImageFont.load_default()
             draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(220,220,220), width=1)
 
         y_cursor_base += sz_px
     return img
 
-# --- GENERADOR PDF ---
+# --- PDF ---
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
-    # PÁG 1: Vectorial
+    # Pág 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -268,14 +291,12 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         except: txt = l['texto']
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
-
         ascent_mm = get_font_metrics_mm(ruta, l['size'])
         y_final_baseline = y_base + l['offset_y'] + ascent_mm
-
         pdf.text(x_centered, y_final_baseline, txt)
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
-    # PÁG 2: Imagen HD
+    # Pág 2: Imagen
     pdf.add_page()
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
@@ -292,17 +313,9 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, wpp_cliente, id_pago):
         remitente = st.secrets["email"]["usuario"]
         password = st.secrets["email"]["password"]
         destinatario = st.secrets["email"]["destinatario"]
-
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
-        cuerpo = f"""
-        NUEVO PEDIDO CONFIRMADO
-        -----------------------
-        Cliente: {cliente}
-        WhatsApp: {wpp_cliente}
-        ID Pago MP: {id_pago}
-        Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-        """
+        cuerpo = f"Cliente: {cliente}\nWhatsApp: {wpp_cliente}\nID MP: {id_pago}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         msg.attach(MIMEText(cuerpo, 'plain'))
         part = MIMEBase('application', "octet-stream")
         part.set_payload(pdf_bytes)
@@ -339,96 +352,70 @@ def verificar_pago_mp(ref_id):
         return None
     except: return None
 
-# --- ESTADO DE SESIÓN ---
+# --- STATE ---
 if 'pedido_id' not in st.session_state: st.session_state.pedido_id = str(uuid.uuid4())
 if 'step' not in st.session_state: st.session_state.step = 'diseño'
 
-# --- INTERFAZ PRINCIPAL ---
+# --- INTERFAZ ---
 col_izq, col_espacio, col_der = st.columns([1, 0.1, 1])
 inputs_disabled = st.session_state.step != 'diseño'
 
-# --- COLUMNA IZQUIERDA: CONFIGURACIÓN ---
 with col_izq:
     st.subheader("🛠️ Configuración")
-
     cant = st.selectbox("Cantidad de líneas", [1,2,3,4], index=2, disabled=inputs_disabled)
     st.write("")
 
     datos = []
-
     for i in range(cant):
-        # Lógica de defaults
+        # State Init
         key_offset = f"offset_state_{i}"
         if key_offset not in st.session_state:
             val_default = 0.0
-            if i < len(EJEMPLO_INICIAL):
-                val_default = float(EJEMPLO_INICIAL[i].get("offset", 0.0))
+            if i < len(EJEMPLO_INICIAL): val_default = float(EJEMPLO_INICIAL[i].get("offset", 0.0))
             st.session_state[key_offset] = val_default
 
+        # Text Defaults
         def_txt = ""; def_idx = 0; def_sz = 9
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
             def_sz = max(8, EJEMPLO_INICIAL[i]["size"])
 
-        # INICIO CARD COMPACTA
+        # CARD
         with st.container(border=True):
+            # Fila 1: Texto | Fuente
+            c1, c2 = st.columns([0.65, 0.35], gap="small")
+            with c1: t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c2: f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            # FILA 1: TEXTO
-            t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
+            # Fila 2: Icono | Stepper | Icono | BtnUp | BtnDown
+            # Ajustamos las proporciones para que entre todo horizontal
+            c_icon1, c_slid1, c_icon2, c_btn1, c_btn2 = st.columns([0.15, 0.35, 0.15, 0.17, 0.18], gap="small")
 
-            # FILA 2: FUENTE
-            f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c_icon1: st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
+            with c_slid1: slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
+            with c_btn1: st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
+            with c_btn2: st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
 
-            # FILA 3: CONTROLES EN LÍNEA
-            # Dividimos en 2 grandes bloques: Izquierda (Tamaño) y Derecha (Posición)
-            col_size, col_pos = st.columns([1, 1])
-
-            # BLOQUE TAMAÑO (AA + Stepper)
-            with col_size:
-                c_icon, c_step = st.columns([0.2, 0.8])
-                with c_icon:
-                    st.markdown('<div style="text-align: center; font-weight: bold; font-size: 1.1rem; padding-top: 10px;">Aᴀ</div>', unsafe_allow_html=True)
-                with c_step:
-                    slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
-
-            # BLOQUE POSICIÓN (Flecha + Botones)
-            with col_pos:
-                c_icon_p, c_btn_up, c_btn_down = st.columns([0.2, 0.4, 0.4])
-                with c_icon_p:
-                    st.markdown('<div style="text-align: center; font-weight: bold; font-size: 1.2rem; padding-top: 10px;">↕</div>', unsafe_allow_html=True)
-
-                # Botones compactos
-                with c_btn_up:
-                    st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
-                with c_btn_down:
-                    st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
-
-            # Validación Ancho
-            offset_actual = st.session_state[key_offset]
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
-            ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
+            ancho_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
-
-            if ancho_actual_mm > ANCHO_REAL_MM:
-                size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
-                size_final = int(size_ajustado)
+            if ancho_mm > ANCHO_REAL_MM:
+                size_final = int((slider_val * (ANCHO_REAL_MM / ancho_mm)) - 0.5)
                 if size_final < 8: size_final = 8
                 st.caption(f"⚠️ Ajustado a {size_final}pt")
 
-            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset_actual})
-# --- CÁLCULO VERTICAL ---
+            datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": st.session_state[key_offset]})
+
+# CALCULO Y RENDER
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
-
-# --- PREVIEW ---
-if not es_valido_vertical: color_borde = "red"
-else: color_borde = "black"
+color_borde = "red" if not es_valido_vertical else "black"
 
 img_pil = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=False)
 img_b64 = pil_to_base64(img_pil)
 
-# --- STICKY HEADER MOBILE ---
 st.markdown(f"""
 <div class="mobile-sticky-header">
     <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">Vista Previa</div>
@@ -439,32 +426,25 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
-# --- COLUMNA DERECHA ---
 with col_der:
     st.markdown('<div class="desktop-only-col">', unsafe_allow_html=True)
-
     st.subheader("👁️ Vista Previa")
     with st.container(border=True):
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
-        m2.metric("Sello", f"{ANCHO_REAL_MM} mm", delta_color="normal")
+        m2.metric("Sello", f"{ANCHO_REAL_MM} mm")
         mostrar_guias = st.checkbox("📏 Guías Técnicas", value=False, disabled=inputs_disabled)
 
     if not es_valido_vertical: st.error("⛔ EXCESO DE ALTURA")
-
-    st.image(renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias), use_container_width=True)
-
+    st.image(renderizar_imagen(datos, SCALE_PREVIEW, color_borde, mostrar_guias), use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("---")
 
-    # --- FLUJO ---
     if es_valido_vertical:
         if st.session_state.step == 'diseño':
             if st.button("✅ CONFIRMAR DISEÑO", use_container_width=True, type="primary"):
-                st.session_state.step = 'datos'
-                st.rerun()
+                st.session_state.step = 'datos'; st.rerun()
 
         elif st.session_state.step == 'datos':
             st.info("🔒 Diseño bloqueado.")
@@ -472,47 +452,28 @@ with col_der:
                 st.write("Tus Datos:")
                 c_nom, c_wpp = st.columns(2)
                 with c_nom: nom = st.text_input("Nombre Completo")
-                with c_wpp: wpp = st.text_input("WhatsApp (con cód. área)")
+                with c_wpp: wpp = st.text_input("WhatsApp")
                 ir_pago = st.form_submit_button("💳 IR A PAGAR")
-
-            if st.button("⬅️ Editar Diseño"):
-                st.session_state.step = 'diseño'
-                st.rerun()
-
+            if st.button("⬅️ Editar"): st.session_state.step = 'diseño'; st.rerun()
             if ir_pago:
-                if not nom or not wpp: st.toast("Completa todos los datos", icon="⚠️")
+                if not nom or not wpp: st.toast("Faltan datos", icon="⚠️")
                 else:
-                    st.session_state.cliente_nombre = nom
-                    st.session_state.cliente_wpp = wpp
+                    st.session_state.cliente_nombre = nom; st.session_state.cliente_wpp = wpp
                     link = crear_preferencia_pago(nom, st.session_state.pedido_id)
-                    if link:
-                        st.session_state.link_pago = link
-                        st.session_state.step = 'pago'
-                        st.rerun()
+                    if link: st.session_state.link_pago = link; st.session_state.step = 'pago'; st.rerun()
 
         elif st.session_state.step == 'pago':
-            st.success(f"¡Hola {st.session_state.cliente_nombre}!")
-            st.markdown(f"**Total a pagar: ${PRECIO_SELLO}**")
+            st.success(f"Hola {st.session_state.cliente_nombre}!")
             st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago, type="primary", use_container_width=True)
-            st.write("")
-            st.caption("Una vez realizado el pago, presiona el botón de abajo:")
-
-            if st.button("🔄 VERIFICAR PAGO Y ENVIAR", use_container_width=True):
+            st.write(""); st.caption("Una vez realizado el pago:")
+            if st.button("🔄 VERIFICAR PAGO", use_container_width=True):
                 with st.spinner("Verificando..."):
-                    pago_id = verificar_pago_mp(st.session_state.pedido_id)
-                    if pago_id:
-                        st.success("✅ ¡Pago Confirmado!")
-                        pdf_bytes, f_name = generar_pdf_hibrido(datos, st.session_state.cliente_nombre, incluir_guias_hd=mostrar_guias)
-                        ok = enviar_email(pdf_bytes, f_name, st.session_state.cliente_nombre, st.session_state.cliente_wpp, pago_id)
-                        if ok:
-                            st.balloons()
-                            st.success("📩 ¡Enviado!")
-                            if st.button("Hacer otro pedido"):
-                                st.session_state.step = 'diseño'
-                                st.session_state.pedido_id = str(uuid.uuid4())
-                                st.rerun()
-                    else: st.error("❌ Pago no encontrado.")
-
-            if st.button("⬅️ Atrás"):
-                st.session_state.step = 'datos'
-                st.rerun()
+                    pid = verificar_pago_mp(st.session_state.pedido_id)
+                    if pid:
+                        st.success("✅ Pago Confirmado")
+                        pdf, fname = generar_pdf_hibrido(datos, st.session_state.cliente_nombre, incluir_guias_hd=mostrar_guias)
+                        if enviar_email(pdf, fname, st.session_state.cliente_nombre, st.session_state.cliente_wpp, pid):
+                            st.balloons(); st.success("📩 ¡Enviado!")
+                            if st.button("Nuevo"): st.session_state.step = 'diseño'; st.session_state.pedido_id = str(uuid.uuid4()); st.rerun()
+                    else: st.error("Pago no encontrado")
+            if st.button("⬅️ Atrás"): st.session_state.step = 'datos'; st.rerun()
