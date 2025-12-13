@@ -52,14 +52,14 @@ ALTO_REAL_MM = 15
 SCALE_PREVIEW = 20
 SCALE_HD = 80
 
-# --- DATOS DE EJEMPLO ---
+# --- DATOS DE EJEMPLO (CORREGIDOS A MIN 8pt) ---
 EJEMPLO_INICIAL = [
     {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
+    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 8, "offset": 0.0} # <-- Corregido de 7 a 8 para cumplir la regla
 ]
 
-# --- 🎨 ESTILOS CSS (RESPONSIVE PRO + BOTONES STEPPER) ---
+# --- 🎨 ESTILOS CSS (RESPONSIVE PRO) ---
 st.markdown("""
 <style>
     .stApp { background-color: #fafafa; }
@@ -96,23 +96,14 @@ st.markdown("""
         color: #555;
     }
 
-    /* --- CLASE ESPECIAL PARA BOTONES DE MOVIMIENTO (STEPPER) --- */
-    /* Apuntamos a los botones pequeños dentro de las columnas de configuración */
+    /* Botones Stepper (Gris) */
     div[data-testid="column"] button.kind-secondary {
         background-color: #e9ecef !important;
         color: #333 !important;
         border: 1px solid #ced4da !important;
-        font-size: 1.2rem !important;
-        padding: 0px 5px !important;
-        line-height: 1 !important;
-        height: 42px; /* Misma altura que los inputs */
-    }
-    div[data-testid="column"] button.kind-secondary:hover {
-        background-color: #ced4da !important;
-        border-color: #adb5bd !important;
     }
 
-    /* Botón CONFIRMAR (Verde) - Usamos selector específico para no pisar los grises */
+    /* Botón CONFIRMAR (Verde) */
     div[data-testid="stForm"] button {
         background-color: #28a745 !important;
         color: white !important;
@@ -192,11 +183,9 @@ def get_font_metrics_mm(ruta_fuente, size_pt):
     except:
         return (size_pt * FACTOR_PT_A_MM) * 0.78
 
-# --- CALLBACKS PARA POSICION Y ---
-# Funciones para manejar el click de los botones de posición
+# --- CALLBACKS POS Y ---
 def mover_arriba(key):
     st.session_state[key] = max(-10.0, st.session_state[key] - 0.5)
-
 def mover_abajo(key):
     st.session_state[key] = min(10.0, st.session_state[key] + 0.5)
 
@@ -258,6 +247,8 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 # --- GENERADOR PDF ---
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
+
+    # PÁG 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -277,17 +268,21 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         except: txt = l['texto']
         txt_width = pdf.get_string_width(txt)
         x_centered = (ANCHO_REAL_MM - txt_width) / 2
+
         ascent_mm = get_font_metrics_mm(ruta, l['size'])
         y_final_baseline = y_base + l['offset_y'] + ascent_mm
+
         pdf.text(x_centered, y_final_baseline, txt)
         y_base += (l['size'] * FACTOR_PT_A_MM)
 
+    # PÁG 2: Imagen HD
     pdf.add_page()
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
     img_hd.save(temp_path, quality=100, subsampling=0)
     pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
     if os.path.exists(temp_path): os.remove(temp_path)
+
     fname = f"{cliente.replace(' ', '_')}_{datetime.now().strftime('%H%M%S')}.pdf"
     return bytes(pdf.output()), fname
 
@@ -297,6 +292,7 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, wpp_cliente, id_pago):
         remitente = st.secrets["email"]["usuario"]
         password = st.secrets["email"]["password"]
         destinatario = st.secrets["email"]["destinatario"]
+
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido PAGADO: {cliente}"
         cuerpo = f"""
@@ -361,63 +357,56 @@ with col_izq:
     datos = []
 
     for i in range(cant):
-        # 1. Recuperar valor inicial del ejemplo o crear estado en 0.0 si no existe
-        # Esto es vital para que los botones sepan qué valor modificar
+        # 1. Recuperar valor inicial y forzar MÍNIMO 8 para evitar errores
         key_offset = f"offset_state_{i}"
 
-        # Si es la primera vez que corre, inicializamos el estado con el default del ejemplo
         if key_offset not in st.session_state:
             val_default = 0.0
             if i < len(EJEMPLO_INICIAL):
                 val_default = float(EJEMPLO_INICIAL[i].get("offset", 0.0))
             st.session_state[key_offset] = val_default
 
-        # Defaults para textos (solo visual inicial)
         def_txt = ""; def_idx = 0; def_sz = 9
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
-            def_sz = EJEMPLO_INICIAL[i]["size"]
+            def_sz = max(8, EJEMPLO_INICIAL[i]["size"]) # SAFETY CHECK: Nunca menos de 8
 
         # INICIO CARD
         with st.container(border=True):
 
-            # FILA 1: Texto y Fuente
+            # FILA 1
             c_top1, c_top2 = st.columns([0.65, 0.35])
             with c_top1:
                 t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
             with c_top2:
                 f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            # FILA 2: Icono Sz | Stepper Sz | Icono Pos | Botones Pos
+            # FILA 2
             c_icon1, c_slid1, c_icon2, c_btn1, c_btn2 = st.columns([0.1, 0.35, 0.1, 0.2, 0.2])
 
             with c_icon1: st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
             with c_slid1:
-                # LÍMITE MÍNIMO: 8pt
+                # LÍMITE MÍNIMO 8
                 slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
             with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
 
-            # --- BOTONES CUSTOM PARA POSICIÓN (ARRIBA/ABAJO) ---
-            # Usamos 'args' para pasarle la llave correcta a la función
             with c_btn1:
                 st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, help="Subir")
             with c_btn2:
                 st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, help="Bajar")
 
-            # Leemos el valor actual del estado (que los botones modificaron)
             offset_actual = st.session_state[key_offset]
 
-            # Validación Ancho
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
-                # OJO: Si el ajuste baja de 8pt, avisamos
-                if size_final < 8: size_final = 8 # Force min 8 safety
+                # PROTECCIÓN EXTRA: Si el ajuste baja de 8, lo dejamos en 8 (se saldrá del margen, pero no crashea)
+                if size_final < 8: size_final = 8
                 st.caption(f"⚠️ Ajustado a {size_final}pt")
 
             datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset_actual})
@@ -426,16 +415,14 @@ with col_izq:
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
 
-# --- RENDERIZAR IMAGEN PREVIEW ---
-if not es_valido_vertical:
-    color_borde = "red"
-else:
-    color_borde = "black"
+# --- PREVIEW ---
+if not es_valido_vertical: color_borde = "red"
+else: color_borde = "black"
 
 img_pil = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=False)
 img_b64 = pil_to_base64(img_pil)
 
-# --- INYECTAR HEADER STICKY (SOLO MOBILE VIA CSS) ---
+# --- STICKY HEADER MOBILE ---
 st.markdown(f"""
 <div class="mobile-sticky-header">
     <div style="font-size:0.9rem; font-weight:bold; margin-bottom:5px;">Vista Previa</div>
@@ -447,7 +434,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- COLUMNA DERECHA (DESKTOP) ---
+# --- COLUMNA DERECHA ---
 with col_der:
     st.markdown('<div class="desktop-only-col">', unsafe_allow_html=True)
 
@@ -466,16 +453,13 @@ with col_der:
 
     st.write("---")
 
-    # --- FLUJO DE PASOS ---
-
+    # --- FLUJO ---
     if es_valido_vertical:
-        # PASO 1: DISEÑO
         if st.session_state.step == 'diseño':
             if st.button("✅ CONFIRMAR DISEÑO", use_container_width=True, type="primary"):
                 st.session_state.step = 'datos'
                 st.rerun()
 
-        # PASO 2: DATOS
         elif st.session_state.step == 'datos':
             st.info("🔒 Diseño bloqueado.")
             with st.form("form_datos"):
@@ -500,12 +484,10 @@ with col_der:
                         st.session_state.step = 'pago'
                         st.rerun()
 
-        # PASO 3: PAGO
         elif st.session_state.step == 'pago':
             st.success(f"¡Hola {st.session_state.cliente_nombre}!")
             st.markdown(f"**Total a pagar: ${PRECIO_SELLO}**")
             st.link_button("👉 PAGAR EN MERCADO PAGO", st.session_state.link_pago, type="primary", use_container_width=True)
-
             st.write("")
             st.caption("Una vez realizado el pago, presiona el botón de abajo:")
 
