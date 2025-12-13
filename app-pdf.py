@@ -170,7 +170,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             # --- AJUSTE DE TAMAÑO DE COTA ---
             # Hacemos la fuente mucho más pequeña relativa a la imagen
             # Antes: scale/2.5 -> Ahora: scale/6
-            tamano_fuente_guia = int(8 * scale / 6)
+            tamano_fuente_guia = int(8 * scale / 3)
 
             try: ascent, descent = font.getmetrics()
             except: ascent = sz_px * 0.8
@@ -191,7 +191,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             draw.text((scale * 0.5, y_base_guia - tamano_fuente_guia), label, font=font_small, fill=color_guia)
 
             # 3. Caja delimitadora (Gris muy suave)
-            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(220,220,220), width=1)
+            draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(220,220,220), width=0)
 
         y_cursor_base += sz_px
 
