@@ -105,7 +105,7 @@ def calcular_ancho_texto_mm(texto, ruta_fuente, size_pt):
     width_px = font.getlength(texto)
     return width_px / scale_measure
 
-# --- MOTOR GRÁFICO (CON GUIAS ESCALABLES) ---
+# --- MOTOR GRÁFICO (CON CORRECCIÓN DE LÍNEA BASE) ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
@@ -113,13 +113,10 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
     img = Image.new('RGB', (w_px, h_px), "white")
     draw = ImageDraw.Draw(img)
 
-    # Grosor dinámico del borde según escala
-    grosor_borde = max(2, int(scale / 5)) if dibujar_borde else 0
     if dibujar_borde:
-        grosor_final = 4 if color_borde == "red" else grosor_borde
-        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor_final)
+        grosor = 4 if color_borde == "red" else max(2, int(scale/5))
+        draw.rectangle([(0,0), (w_px-1, h_px-1)], outline=color_borde, width=grosor)
 
-    # Calcular centrado
     total_h_px = 0
     for linea in datos_lineas:
         size_pt = linea['size']
@@ -146,37 +143,42 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         text_w = bbox[2] - bbox[0]
         x_pos = (w_px - text_w) / 2
 
-        # Posición Y final
+        # Posición Y final (Top-Left visual)
         y_final_px = y_cursor_base + offset_px
 
         # Dibujar Texto
         draw.text((x_pos, y_final_px), txt, font=font, fill="black")
 
-        # --- DIBUJAR GUÍAS TÉCNICAS (ESCALABLES) ---
+        # --- DIBUJAR GUÍAS TÉCNICAS (CORREGIDAS) ---
         if mostrar_guias:
             color_guia = (0, 150, 255)
-
-            # Ajuste de grosores para HD
             grosor_guia = max(1, int(scale / 10))
-            tamano_fuente_guia = int(8 * scale / 5) # ~8pt en preview, ~32pt en HD
+            tamano_fuente_guia = int(8 * scale / 5)
 
-            # 1. Línea Base
-            y_base_guia = y_final_px + sz_px
-            draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
+            # --- CORRECCIÓN CLAVE ---
+            # Obtenemos el "Ascent" (altura desde el techo hasta la línea base)
+            ascent, descent = font.getmetrics()
+
+            # La línea base REAL está en: Posición Y (Techo) + Ascent
+            y_base_real = y_final_px + ascent
+
+            # 1. Línea Base (Cyan) - AHORA SÍ EXACTA
+            draw.line([(0, y_base_real), (w_px, y_base_real)], fill=color_guia, width=grosor_guia)
 
             # 2. Cota
             try: font_small = ImageFont.truetype("Arial", tamano_fuente_guia)
             except: font_small = ImageFont.load_default()
 
-            pos_mm_real = y_base_guia / scale
+            pos_mm_real = y_base_real / scale
             label = f"L{i+1}: {pos_mm_real:.1f}mm"
 
-            # Dibujar cota
-            draw.text((grosor_guia * 2, y_base_guia - tamano_fuente_guia), label, font=font_small, fill=color_guia)
+            draw.text((grosor_guia * 2, y_base_real - tamano_fuente_guia), label, font=font_small, fill=color_guia)
 
-            # 3. Caja delimitadora
+            # 3. Caja delimitadora (Gris suave)
+            # Esto muestra el área total de la fuente (incluyendo acentos y colas)
             draw.rectangle([x_pos, y_final_px, x_pos + text_w, y_final_px + sz_px], outline=(200,200,200), width=grosor_guia)
 
+        # Avanzar cursor
         y_cursor_base += sz_px
 
     return img
@@ -185,7 +187,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
     pdf = FPDF(orientation='P', unit='mm', format=(ANCHO_REAL_MM, ALTO_REAL_MM))
 
-    # PÁG 1: Vectorial (Limpia)
+    # PÁG 1: Vectorial
     pdf.add_page(); pdf.set_margins(0,0,0); pdf.set_auto_page_break(False, margin=0)
     font_map = {}; font_counter = 1
     for ruta in FUENTES_DISPONIBLES.values():
@@ -213,12 +215,9 @@ def generar_pdf_hibrido(datos_lineas, cliente, incluir_guias_hd=False):
         pdf.text(x_centered, y_final, txt)
         y_base += altura_linea
 
-    # PÁG 2: IMAGEN HD (TESTIGO CON COTAS SI SE PIDIÓ)
+    # PÁG 2: IMAGEN HD
     pdf.add_page()
-
-    # Generar imagen HD, pasando el parámetro de guías que viene de la interfaz
     img_hd = renderizar_imagen(datos_lineas, scale=SCALE_HD, dibujar_borde=False, mostrar_guias=incluir_guias_hd)
-
     temp_path = f"temp_{datetime.now().strftime('%f')}.jpg"
     img_hd.save(temp_path, quality=100, subsampling=0)
     pdf.image(temp_path, x=0, y=0, w=ANCHO_REAL_MM, h=ALTO_REAL_MM)
@@ -236,7 +235,7 @@ def enviar_email(pdf_bytes, nombre_pdf, cliente, email_cliente):
 
         msg = MIMEMultipart()
         msg['From'] = remitente; msg['To'] = destinatario; msg['Subject'] = f"Pedido Quesello: {cliente}"
-        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\nAdjunto PDF Híbrido (Vector + Imagen HD con Cotas)."
+        cuerpo = f"Cliente: {cliente}\nEmail: {email_cliente}\nFecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\nAdjunto PDF Híbrido."
         msg.attach(MIMEText(cuerpo, 'plain'))
         part = MIMEBase('application', "octet-stream")
         part.set_payload(pdf_bytes)
@@ -305,8 +304,7 @@ with col_der:
         m1, m2 = st.columns(2)
         m1.metric("Altura Texto", f"{altura_total_usada_mm:.1f} mm")
         m2.metric("Sello", f"{ALTO_REAL_MM} mm", delta_color="normal")
-        # CHECKBOX DE GUÍAS
-        mostrar_guias = st.checkbox("📏 Mostrar Guías Técnicas (Se imprimirán en Pág 2)", value=False)
+        mostrar_guias = st.checkbox("📏 Mostrar Guías Técnicas", value=False)
 
     if not es_valido_vertical:
         st.error("⛔ EXCESO DE ALTURA")
@@ -314,7 +312,6 @@ with col_der:
     else:
         color_borde = "black"
 
-    # Preview
     img_preview = renderizar_imagen(datos, scale=SCALE_PREVIEW, color_borde=color_borde, mostrar_guias=mostrar_guias)
     st.image(img_preview, use_container_width=True)
 
@@ -334,7 +331,7 @@ with col_der:
             if not nom: st.toast("Falta nombre", icon="⚠️")
             else:
                 with st.spinner("Procesando..."):
-                    # PASAMOS EL ESTADO DE 'MOSTRAR_GUIAS' AL GENERADOR PDF
+                    # Pasamos el estado de las guías al PDF
                     pdf_bytes, f_name = generar_pdf_hibrido(datos, nom, incluir_guias_hd=mostrar_guias)
                     enviado = enviar_email(pdf_bytes, f_name, nom, mail)
                     if enviado:
