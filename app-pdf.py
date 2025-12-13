@@ -106,8 +106,8 @@ st.markdown("""
     }
 
 /* Small devices (tablets/large phones, 576px and up) */
-@media (min-width: 576px) {
-  .stImage {
+@media (min-width: 376px) {
+  .st-emotion-cache-pa57uv {
     position:fixed!important;
   }
 }
