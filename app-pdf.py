@@ -105,6 +105,13 @@ st.markdown("""
         border: none;
     }
 
+/* Small devices (tablets/large phones, 576px and up) */
+@media (min-width: 576px) {
+  .stImage {
+    position:fixed!important;
+  }
+}
+
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
