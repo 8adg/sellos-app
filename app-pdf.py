@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # --- CONFIGURACIÓN COMERCIAL ---
-PRECIO_SELLO = 20500 # Precio en ARS
+PRECIO_SELLO = 500 # Precio en ARS
 MP_ACCESS_TOKEN = st.secrets["mercadopago"]["access_token"]
 
 # Inicializar SDK de Mercado Pago
