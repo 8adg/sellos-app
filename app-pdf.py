@@ -357,9 +357,8 @@ with col_izq:
     datos = []
 
     for i in range(cant):
-        # 1. Recuperar valor inicial y forzar MÍNIMO 8 para evitar errores
+        # Lógica de defaults
         key_offset = f"offset_state_{i}"
-
         if key_offset not in st.session_state:
             val_default = 0.0
             if i < len(EJEMPLO_INICIAL):
@@ -370,47 +369,54 @@ with col_izq:
         if i < len(EJEMPLO_INICIAL):
             def_txt = EJEMPLO_INICIAL[i]["texto"]
             def_idx = EJEMPLO_INICIAL[i]["font_idx"]
-            def_sz = max(8, EJEMPLO_INICIAL[i]["size"]) # SAFETY CHECK: Nunca menos de 8
+            def_sz = max(8, EJEMPLO_INICIAL[i]["size"])
 
-        # INICIO CARD
+        # INICIO CARD COMPACTA
         with st.container(border=True):
 
-            # FILA 1
-            c_top1, c_top2 = st.columns([0.65, 0.35])
-            with c_top1:
-                t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
-            with c_top2:
-                f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            # FILA 1: TEXTO
+            t = st.text_input(f"t{i}", value=def_txt, key=f"ti{i}", placeholder=f"Línea {i+1}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            # FILA 2
-            c_icon1, c_slid1, c_icon2, c_btn1, c_btn2 = st.columns([0.1, 0.35, 0.1, 0.2, 0.2])
+            # FILA 2: FUENTE
+            f_key = st.selectbox(f"f{i}", list(FUENTES_DISPONIBLES.keys()), index=def_idx, key=f"fi{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            with c_icon1: st.markdown('<div class="icon-label">Aᴀ</div>', unsafe_allow_html=True)
-            with c_slid1:
-                # LÍMITE MÍNIMO 8
-                slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
+            # FILA 3: CONTROLES EN LÍNEA
+            # Dividimos en 2 grandes bloques: Izquierda (Tamaño) y Derecha (Posición)
+            col_size, col_pos = st.columns([1, 1])
 
-            with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
+            # BLOQUE TAMAÑO (AA + Stepper)
+            with col_size:
+                c_icon, c_step = st.columns([0.2, 0.8])
+                with c_icon:
+                    st.markdown('<div style="text-align: center; font-weight: bold; font-size: 1.1rem; padding-top: 10px;">Aᴀ</div>', unsafe_allow_html=True)
+                with c_step:
+                    slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            with c_btn1:
-                st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, help="Subir")
-            with c_btn2:
-                st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, help="Bajar")
+            # BLOQUE POSICIÓN (Flecha + Botones)
+            with col_pos:
+                c_icon_p, c_btn_up, c_btn_down = st.columns([0.2, 0.4, 0.4])
+                with c_icon_p:
+                    st.markdown('<div style="text-align: center; font-weight: bold; font-size: 1.2rem; padding-top: 10px;">↕</div>', unsafe_allow_html=True)
 
+                # Botones compactos
+                with c_btn_up:
+                    st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
+                with c_btn_down:
+                    st.button("▼", key=f"down_{i}", on_click=mover_abajo, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
+
+            # Validación Ancho
             offset_actual = st.session_state[key_offset]
-
             ruta_fuente = FUENTES_DISPONIBLES[f_key]
             ancho_actual_mm = calcular_ancho_texto_mm(t, ruta_fuente, slider_val)
             size_final = slider_val
+
             if ancho_actual_mm > ANCHO_REAL_MM:
                 size_ajustado = (slider_val * (ANCHO_REAL_MM / ancho_actual_mm)) - 0.5
                 size_final = int(size_ajustado)
-                # PROTECCIÓN EXTRA: Si el ajuste baja de 8, lo dejamos en 8 (se saldrá del margen, pero no crashea)
                 if size_final < 8: size_final = 8
                 st.caption(f"⚠️ Ajustado a {size_final}pt")
 
             datos.append({"texto": t, "fuente": ruta_fuente, "size": size_final, "offset_y": offset_actual})
-
 # --- CÁLCULO VERTICAL ---
 altura_total_usada_mm = sum([d['size'] * FACTOR_PT_A_MM for d in datos])
 es_valido_vertical = (ALTO_REAL_MM - altura_total_usada_mm) >= -1.0
