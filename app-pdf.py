@@ -89,7 +89,7 @@ st.markdown("""
 
     /* Estilo para los Iconos de Tamaño/Posición */
     .icon-label {
-        font-size: 1.1rem;
+        font-size: 2rem;
         font-weight: bold;
         text-align: center;
         padding-top: 10px;
