@@ -52,9 +52,9 @@ SCALE_HD = 80
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
-    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 8, "size": 7, "offset": 0.0}
+    {"texto": "Juan Pérez", "font_idx": 2, "size": 21, "offset": -2.5},
+    {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 10, "offset": -2.0},
+    {"texto": "Matrícula N° 2040", "font_idx": 8, "size": 9, "offset": -1.0}
 ]
 
 # --- 🎨 ESTILOS CSS (DARK MODE FIX + MOBILE ROW FIX) ---
