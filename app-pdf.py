@@ -35,8 +35,6 @@ FUENTES_DISPONIBLES = {
     "Aleo Italic": "assets/fonts/Aleo-Italic.ttf",
     "Amaze (Manuscrita)": "assets/fonts/amaze.ttf",
     "Great Vibes": "assets/fonts/GreatVibes-Regular.ttf",
-    "Montserrat Regular": "assets/fonts/Montserrat-Regular.ttf",
-    "Montserrat SemiBold": "assets/fonts/Montserrat-SemiBold.ttf",
     "Mukta Mahee": "assets/fonts/MuktaMahee-Regular.ttf",
     "Mukta Mahee SemiBold": "assets/fonts/MuktaMahee-SemiBold.ttf",
     "Playwrite": "assets/fonts/Playwrite-Regular.ttf",
@@ -56,7 +54,7 @@ SCALE_HD = 80
 EJEMPLO_INICIAL = [
     {"texto": "Juan Pérez", "font_idx": 2, "size": 16, "offset": -1.5},
     {"texto": "DISEÑADOR GRÁFICO", "font_idx": 5, "size": 8, "offset": 0.0},
-    {"texto": "Matrícula N° 2040", "font_idx": 4, "size": 7, "offset": 0.0}
+    {"texto": "Matrícula N° 2040", "font_idx": 6, "size": 7, "offset": 0.0}
 ]
 
 # --- 🎨 ESTILOS CSS (DARK MODE FIX + MOBILE ROW FIX) ---
