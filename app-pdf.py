@@ -89,12 +89,12 @@ st.markdown("""
 
     /* Estilo para los Iconos de Tamaño/Posición */
     .icon-label {
-        font-size: 2rem;
-        font-weight: bold;
+        font-size: 1rem;
+        font-weight: normal;
         text-align: center;
-        padding-top: 10px;
+        padding: 6px;
         color: #555 !important;
-        line-height: 1;
+        line-height: 1.2;
     }
 
     /* --- ARREGLO BOTONES EN DARK MODE --- */
