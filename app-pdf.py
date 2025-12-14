@@ -52,7 +52,7 @@ SCALE_HD = 80
 
 # --- DATOS DE EJEMPLO ---
 EJEMPLO_INICIAL = [
-    {"texto": "Juan Pérez Pardo", "font_idx": 1, "size": 13, "offset": -2.9},
+    {"texto": "Juan Pérez Pardo", "font_idx": 1, "size": 13, "offset": -1.0},
     {"texto": "MÉDICO CLÍNICO", "font_idx": 5, "size": 9, "offset": -1.9},
     {"texto": "Matrícula N° 20408978", "font_idx": 8, "size": 9, "offset": -0.9}
 ]
