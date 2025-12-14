@@ -410,11 +410,11 @@ with col_izq:
             # FILA 2: Icono Sz | Stepper Sz | Icono Pos | BtnUp | BtnDown
             c_icon1, c_slid1, c_icon2, c_btn1, c_btn2 = st.columns([0.15, 0.35, 0.15, 0.17, 0.18], gap="small")
 
-            with c_icon1: st.markdown('<div class="icon-label"><strong> Aᴀ </strong>  <span class="ch">TAMAÑO DE LETRA</span></div>', unsafe_allow_html=True)
+            with c_icon1: st.markdown('<div class="icon-label"><strong> Aᴀ </strong>  <span>TAMAÑO</span></div>', unsafe_allow_html=True)
             with c_slid1:
                 slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            with c_icon2: st.markdown('<div class="icon-label"><strong> ↕ </strong><span class="ch">AJUSTE DE LINEA</span> </div>', unsafe_allow_html=True)
+            with c_icon2: st.markdown('<div class="icon-label"><strong> ↕ </strong><span>AJUSTE LINEA</span> </div>', unsafe_allow_html=True)
             with c_btn1:
                 st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
             with c_btn2:
