@@ -204,7 +204,7 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
             label = f"{pos_mm_real:.1f}"
 
             draw.text((scale * 0.5, y_base_guia - tamano_fuente_cota), label, font=font_small, fill=color_guia)
-            draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(200,200,200), width=1)
+            draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(200,200,200), width=0)
 
         y_cursor_base += sz_px
     return img
