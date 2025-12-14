@@ -138,7 +138,7 @@ st.markdown("""
             max-width: 90%; height: auto;
             border: 1px solid #ddd; border-radius: 4px;
         }
-        .block-container { padding-top: 25vh !important; }
+        .block-container { padding-top: 40vh !important; }
         .desktop-only-col { display: none; }
 
         /* 2. FORZAR FILA HORIZONTAL (NO STACKING) */
