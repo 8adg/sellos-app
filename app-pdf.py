@@ -416,7 +416,7 @@ with col_izq:
             with c_slid1:
                 slider_val = st.number_input(f"s{i}", min_value=8, max_value=26, value=def_sz, key=f"si{i}", label_visibility="collapsed", disabled=inputs_disabled)
 
-            with c_icon2: st.markdown('<div class="icon-label">↕</div>', unsafe_allow_html=True)
+            with c_icon2: st.markdown('<h3 class="icon-label">↕</h3>', unsafe_allow_html=True)
             with c_btn1:
                 st.button("▲", key=f"up_{i}", on_click=mover_arriba, args=(key_offset,), disabled=inputs_disabled, use_container_width=True)
             with c_btn2:
