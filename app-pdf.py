@@ -87,8 +87,8 @@ st.markdown("""
 
     /* Estilo para los Iconos de Tamaño/Posición */
     .icon-label {
-        font-size: 0.75rem;
-        font-weight: normal;
+        font-size: 0.6rem;
+        font-weight:bold;
         text-align: center;
         padding: 6px;
         color: #555 !important;
