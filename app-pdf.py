@@ -217,7 +217,7 @@ def mover_abajo(key):
     st.session_state[key] = min(10.0, st.session_state[key] + 0.5)
 
 # --- MOTOR GRÁFICO ---
-# --- MOTOR GRÁFICO (FIX GUIAS) ---
+# --- MOTOR GRÁFICO ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
     w_px = int(ANCHO_REAL_MM * scale)
     h_px = int(ALTO_REAL_MM * scale)
@@ -256,7 +256,6 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
 
         draw.text((x_pos, y_visual_px), txt, font=font, fill="black")
 
-        # --- DIBUJO DE GUÍAS (FIXED FONT) ---
         # Guías (para HD)
         if mostrar_guias:
             color_guia = (0, 150, 255)
