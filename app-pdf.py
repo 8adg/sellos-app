@@ -257,34 +257,23 @@ def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="blac
         draw.text((x_pos, y_visual_px), txt, font=font, fill="black")
 
         # --- DIBUJO DE GUÍAS (FIXED FONT) ---
+        # Guías (para HD)
         if mostrar_guias:
             color_guia = (0, 150, 255)
             grosor_guia = max(1, int(scale / 20))
-
-            # --- FIX: Carga de Fuente de Cota (Usamos una fuente estándar y visible) ---
-            tamano_base_cota = 18  # Tamaño legible en la preview
-            tamano_fuente_cota = int(tamano_base_cota * scale / SCALE_PREVIEW)
-
-            try: font_cota = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
-            except: font_cota = ImageFont.load_default()
-
-            # Métrica de la fuente de la LÍNEA (para la posición correcta)
+            tamano_fuente_cota = int(8 * scale / 6)
             try: ascent, descent = font.getmetrics()
             except: ascent = sz_px * 0.8
             y_base_guia = y_visual_px + ascent
-
-            # 1. Línea Base
             draw.line([(0, y_base_guia), (w_px, y_base_guia)], fill=color_guia, width=grosor_guia)
 
-            # 2. Texto Cota
+            try: font_small = ImageFont.truetype("assets/fonts/Roboto-Regular.ttf", tamano_fuente_cota)
+            except: font_small = font
             pos_mm_real = y_base_guia / scale
-            label = f"{pos_mm_real:.1f}mm"
+            label = f"{pos_mm_real:.1f}"
 
-            # Dibujamos a la izquierda (X=2px)
-            draw.text((scale * 0.5, y_base_guia - tamano_fuente_cota), label, font=font_cota, fill=color_guia)
-
-            # 3. Caja
-            draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(200,200,200), width=grosor_guia)
+            draw.text((scale * 0.5, y_base_guia - tamano_fuente_cota), label, font=font_small, fill=color_guia)
+            draw.rectangle([x_pos, y_visual_px, x_pos + text_w, y_visual_px + sz_px], outline=(200,200,200), width=0)
 
         y_cursor_base += sz_px
     return img
