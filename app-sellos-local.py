@@ -146,8 +146,8 @@ def get_font_metrics_mm(ruta_fuente, size_pt):
         return (size_pt * FACTOR_PT_A_MM) * 0.78
 
 # --- CALLBACKS (Persistencia de estado manual) ---
-def mover_arriba(key): st.session_state[key] = max(-10.0, st.session_state[key] - 0.5)
-def mover_abajo(key): st.session_state[key] = min(10.0, st.session_state[key] + 0.5)
+def mover_arriba(key): st.session_state[key] = max(-10.0, st.session_state[key] - 0.1)
+def mover_abajo(key): st.session_state[key] = min(10.0, st.session_state[key] + 0.1)
 
 # --- MOTOR GRÁFICO ---
 def renderizar_imagen(datos_lineas, scale, dibujar_borde=True, color_borde="black", mostrar_guias=False):
